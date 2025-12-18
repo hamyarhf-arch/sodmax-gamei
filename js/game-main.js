@@ -491,3 +491,210 @@ async function signIn(email, password) {
         return false;
     }
 }
+// ==================== بخش ۷: پنل مدیریت وضعیت ====================
+
+/**
+ * نمایش پنل وضعیت سیستم
+ */
+function showStatusPanel() {
+    const panelHTML = `
+        <div class="modal-overlay" id="statusModal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>📊 وضعیت سیستم</h3>
+                    <button class="modal-close" onclick="closeStatusModal()">×</button>
+                </div>
+                
+                <div class="modal-body">
+                    <div class="status-grid">
+                        <div class="status-item ${window.supabaseConfigured ? 'online' : 'offline'}">
+                            <div class="status-icon">
+                                <i class="fas fa-database"></i>
+                            </div>
+                            <div class="status-info">
+                                <div class="status-title">دیتابیس</div>
+                                <div class="status-value">${window.supabaseConfigured ? 'متصل ✅' : 'قطع ❌'}</div>
+                            </div>
+                        </div>
+                        
+                        <div class="status-item ${window.currentUser ? 'online' : 'offline'}">
+                            <div class="status-icon">
+                                <i class="fas fa-user"></i>
+                            </div>
+                            <div class="status-info">
+                                <div class="status-title">کاربر</div>
+                                <div class="status-value">${window.currentUser ? 'وارد شده ✅' : 'مهمان ❌'}</div>
+                            </div>
+                        </div>
+                        
+                        <div class="status-item ${window.isOfflineMode ? 'offline' : 'online'}">
+                            <div class="status-icon">
+                                <i class="fas fa-wifi"></i>
+                            </div>
+                            <div class="status-info">
+                                <div class="status-title">وضعیت</div>
+                                <div class="status-value">${window.isOfflineMode ? 'آفلاین 📡' : 'آنلاین 🌐'}</div>
+                            </div>
+                        </div>
+                        
+                        <div class="status-item">
+                            <div class="status-icon">
+                                <i class="fas fa-save"></i>
+                            </div>
+                            <div class="status-info">
+                                <div class="status-title">ذخیره محلی</div>
+                                <div class="status-value">فعال ✅</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="data-info">
+                        <h4>📁 اطلاعات ذخیره‌شده:</h4>
+                        <div class="data-stats">
+                            <div class="data-stat">
+                                <span>موجودی SOD:</span>
+                                <strong>${formatNumber(gameData.sodBalance)}</strong>
+                            </div>
+                            <div class="data-stat">
+                                <span>موجودی USDT:</span>
+                                <strong>${gameData.usdtBalance.toFixed(2)}</strong>
+                            </div>
+                            <div class="data-stat">
+                                <span>سطح کاربر:</span>
+                                <strong>${gameData.userLevel}</strong>
+                            </div>
+                            <div class="data-stat">
+                                <span>تراکنش‌ها:</span>
+                                <strong>${gameData.transactions.length}</strong>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="status-actions">
+                        <button class="btn btn-outline btn-block" onclick="exportLocalData()">
+                            <i class="fas fa-download"></i>
+                            خروجی از داده‌های محلی
+                        </button>
+                        
+                        <button class="btn btn-outline btn-block" onclick="clearLocalData()">
+                            <i class="fas fa-trash"></i>
+                            پاک کردن داده‌های محلی
+                        </button>
+                        
+                        ${window.currentUser ? `
+                            <button class="btn btn-primary btn-block" onclick="forceSyncWithDatabase()">
+                                <i class="fas fa-sync"></i>
+                                همگام‌سازی با دیتابیس
+                            </button>
+                        ` : ''}
+                    </div>
+                </div>
+                
+                <div class="modal-footer">
+                    <p class="text-center" style="font-size: 11px;">
+                        آخرین ذخیره: ${new Date(parseInt(localStorage.getItem('sodmaxLastSave') || Date.now())).toLocaleString('fa-IR')}
+                    </p>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', panelHTML);
+}
+
+function closeStatusModal() {
+    const modal = document.getElementById('statusModal');
+    if (modal) modal.remove();
+}
+
+/**
+ * خروجی گرفتن از داده‌های محلی
+ */
+function exportLocalData() {
+    const data = {
+        gameData: gameData,
+        user: window.currentUser,
+        timestamp: new Date().toISOString(),
+        version: localStorage.getItem('sodmaxVersion') || '3.0'
+    };
+    
+    const dataStr = JSON.stringify(data, null, 2);
+    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+    
+    const exportFileDefaultName = `sodmax-backup-${new Date().toISOString().split('T')[0]}.json`;
+    
+    const linkElement = document.createElement('a');
+    linkElement.setAttribute('href', dataUri);
+    linkElement.setAttribute('download', exportFileDefaultName);
+    linkElement.click();
+    
+    showNotification('💾 خروجی گرفته شد', 'داده‌های شما دانلود شدند.');
+}
+
+/**
+ * پاک کردن داده‌های محلی
+ */
+function clearLocalData() {
+    if (confirm('⚠️ آیا مطمئن هستید که می‌خواهید تمام داده‌های محلی را پاک کنید؟\nاین عمل برگشت‌ناپذیر است!')) {
+        localStorage.removeItem('sodmaxProData');
+        localStorage.removeItem('sodmaxUser');
+        localStorage.removeItem('sodmaxLastSave');
+        localStorage.removeItem('sodmaxLastPlayed');
+        
+        // ریست کردن بازی
+        Object.keys(gameData).forEach(key => {
+            if (key !== 'transactions') {
+                gameData[key] = 0;
+            }
+        });
+        gameData.miningPower = 10;
+        gameData.userLevel = 1;
+        gameData.transactions = [];
+        
+        updateUI();
+        showNotification('🗑️ داده‌ها پاک شدند', 'تمام داده‌های محلی پاک شدند.');
+        closeStatusModal();
+    }
+}
+
+/**
+ * همگام‌سازی اجباری با دیتابیس
+ */
+async function forceSyncWithDatabase() {
+    if (!window.currentUser || !window.supabaseConfigured) {
+        showNotification('❌ خطا', 'برای همگام‌سازی باید وارد شده و به دیتابیس متصل باشید.');
+        return;
+    }
+    
+    try {
+        showNotification('🔄 در حال همگام‌سازی...', 'لطفاً منتظر بمانید.');
+        
+        // ذخیره فعلی در دیتابیس
+        await saveGameToDatabase();
+        
+        // بارگذاری مجدد از دیتابیس
+        await loadFromDatabase();
+        
+        updateUI();
+        showNotification('✅ همگام‌سازی موفق', 'داده‌ها با موفقیت همگام‌سازی شدند.');
+        closeStatusModal();
+        
+    } catch (error) {
+        console.error('خطا در همگام‌سازی:', error);
+        showNotification('❌ خطا در همگام‌سازی', 'لطفاً دوباره تلاش کنید.');
+    }
+}
+
+// اضافه کردن دکمه وضعیت در فوتر
+function addStatusButtonToFooter() {
+    const footer = document.querySelector('.footer');
+    if (!footer) return;
+    
+    const statusBtn = document.createElement('button');
+    statusBtn.className = 'btn btn-outline';
+    statusBtn.style.cssText = 'margin: 10px auto; display: block; max-width: 200px;';
+    statusBtn.innerHTML = '<i class="fas fa-info-circle"></i> وضعیت سیستم';
+    statusBtn.onclick = showStatusPanel;
+    
+    footer.querySelector('.copyright').insertAdjacentElement('beforebegin', statusBtn);
+}
