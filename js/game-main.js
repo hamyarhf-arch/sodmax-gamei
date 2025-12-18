@@ -1,8 +1,891 @@
+// ==================== بخش ۱: داده‌های بازی ====================
+const gameData = {
+    sodBalance: 0,
+    usdtBalance: 0,
+    todayEarnings: 0,
+    totalMined: 0,
+    miningPower: 10,
+    userLevel: 1,
+    activePlan: null,
+    usdtProgress: 0,
+    autoMining: false,
+    transactions: [],
+    boostActive: false,
+    boostEndTime: 0,
+    lastClaimTime: null
+};
+
+// پلن‌ها
+const plans = [
+    {
+        id: 1,
+        name: "استارتر",
+        price: 0,
+        multiplier: 1,
+        autoSpeed: 0,
+        usdtBonus: 0,
+        features: [
+            "قدرت استخراج ۱x",
+            "بدون استخراج خودکار",
+            "پاداش استاندارد USDT",
+            "پشتیبانی معمولی",
+            "حداکثر ۱۰۰ کلیک/ساعت"
+        ],
+        popular: false
+    },
+    {
+        id: 2,
+        name: "پرو",
+        price: 49,
+        multiplier: 3,
+        autoSpeed: 50,
+        usdtBonus: 25,
+        features: [
+            "قدرت استخراج ۳x",
+            "استخراج خودکار ۵۰ SOD/ث",
+            "پاداش +۲۵٪ USDT",
+            "پشتیبانی ویژه",
+            "حداکثر ۵۰۰ کلیک/ساعت",
+            "هدیه هفتگی SOD"
+        ],
+        popular: true
+    },
+    {
+        id: 3,
+        name: "پلاتینیوم",
+        price: 199,
+        multiplier: 8,
+        autoSpeed: 200,
+        usdtBonus: 75,
+        features: [
+            "قدرت استخراج ۸x",
+            "استخراج خودکار ۲۰۰ SOD/ث",
+            "پاداش +۷۵٪ USDT",
+            "پشتیبانی VIP",
+            "کلیک نامحدود",
+            "هدیه روزانه SOD",
+            "دسترسی زودهنگام به ویژگی‌ها"
+        ],
+        popular: false
+    },
+    {
+        id: 4,
+        name: "الماس",
+        price: 499,
+        multiplier: 15,
+        autoSpeed: 500,
+        usdtBonus: 150,
+        features: [
+            "قدرت استخراج ۱۵x",
+            "استخراج خودکار ۵۰۰ SOD/ث",
+            "پاداش +۱۵۰٪ USDT",
+            "مدیر اختصاصی",
+            "دریافت روزانه USDT",
+            "مشارکت در سود شبکه",
+            "دسترسی به API پیشرفته"
+        ],
+        popular: false
+    }
+];
+
+// ==================== بخش ۲: توابع عمومی ====================
+function formatNumber(num) {
+    if (num >= 1000000000) {
+        return (num / 1000000000).toFixed(2) + 'B';
+    }
+    if (num >= 1000000) {
+        return (num / 1000000).toFixed(1) + 'M';
+    }
+    if (num >= 1000) {
+        return (num / 1000).toFixed(1) + 'K';
+    }
+    return Math.floor(num).toLocaleString('fa-IR');
+}
+
+function showNotification(title, message) {
+    const notification = document.getElementById('notification');
+    if (!notification) return;
+    
+    document.getElementById('notificationTitle').textContent = title;
+    document.getElementById('notificationMessage').textContent = message;
+    
+    notification.classList.add('show');
+    
+    setTimeout(() => {
+        notification.classList.remove('show');
+    }, 4000);
+}
+
+function hideNotification() {
+    const notification = document.getElementById('notification');
+    if (notification) notification.classList.remove('show');
+}
+
+function showConfirmationModal(title, message, onConfirm) {
+    if (window.confirm(`${title}\n\n${message}`)) {
+        onConfirm();
+    }
+}
+
+// ==================== بخش ۳: توابع ذخیره/بارگذاری پیشرفته ====================
+
+/**
+ * ذخیره ترکیبی - هم محلی هم دیتابیس
+ */
+async function saveGame() {
+    // ۱. ذخیره در localStorage (همیشه)
+    try {
+        localStorage.setItem('sodmaxProData', JSON.stringify(gameData));
+        localStorage.setItem('sodmaxLastSave', Date.now());
+        localStorage.setItem('sodmaxVersion', '3.0');
+    } catch (e) {
+        console.warn('ذخیره محلی با خطا مواجه شد:', e);
+    }
+    
+    // ۲. ذخیره در دیتابیس (اگر کاربر وارد شده)
+    if (window.currentUser && window.supabase && window.supabaseConfigured) {
+        try {
+            await saveGameToDatabase();
+            console.log('✅ بازی در دیتابیس ذخیره شد');
+        } catch (dbError) {
+            console.warn('ذخیره دیتابیس با خطا مواجه شد:', dbError);
+            // اگر دیتابیس خطا داد، حالت آفلاین رو فعال کن
+            enableOfflineMode();
+        }
+    }
+}
+
+/**
+ * بارگذاری ترکیبی - اول از localStorage، بعد از دیتابیس
+ */
+async function loadGame() {
+    let loadedFromDB = false;
+    
+    // ۱. اول از دیتابیس بارگذاری کن (اگر کاربر وارد شده)
+    if (window.currentUser && window.supabase && window.supabaseConfigured) {
+        try {
+            loadedFromDB = await loadFromDatabase();
+            if (loadedFromDB) {
+                console.log('✅ داده‌ها از دیتابیس بارگذاری شدند');
+                return;
+            }
+        } catch (dbError) {
+            console.warn('بارگذاری از دیتابیس با خطا مواجه شد:', dbError);
+        }
+    }
+    
+    // ۲. اگر از دیتابیس بارگذاری نشد، از localStorage استفاده کن
+    try {
+        const saved = localStorage.getItem('sodmaxProData');
+        if (saved) {
+            const data = JSON.parse(saved);
+            
+            // مهاجرت داده‌های قدیمی اگر نیاز باشد
+            migrateOldData(data);
+            
+            Object.assign(gameData, data);
+            
+            // بازنشانی روزانه
+            const today = new Date().toDateString();
+            const lastPlayed = localStorage.getItem('sodmaxLastPlayed');
+            
+            if (lastPlayed !== today) {
+                gameData.todayEarnings = 0;
+                localStorage.setItem('sodmaxLastPlayed', today);
+            }
+            
+            console.log('✅ داده‌ها از localStorage بارگذاری شدند');
+            
+            // اگر کاربر وارد شده اما از localStorage بارگذاری کردیم، دیتابیس رو آپدیت کن
+            if (window.currentUser && !loadedFromDB) {
+                setTimeout(() => {
+                    saveGameToDatabase();
+                }, 2000);
+            }
+        }
+    } catch (e) {
+        console.warn('بارگذاری از localStorage با خطا مواجه شد:', e);
+    }
+}
+
+/**
+ * بارگذاری از دیتابیس
+ */
+async function loadFromDatabase() {
+    if (!window.currentUser || !window.supabase) return false;
+    
+    try {
+        // دریافت داده‌های بازی کاربر
+        const { data: gameDataDB, error: gameError } = await supabase
+            .from('user_game_data')
+            .select('*')
+            .eq('user_id', window.currentUser.id)
+            .single();
+
+        if (gameError) throw gameError;
+        
+        if (gameDataDB) {
+            // تبدیل داده‌های دیتابیس به فرمت بازی
+            gameData.sodBalance = gameDataDB.sod_balance || 0;
+            gameData.usdtBalance = parseFloat(gameDataDB.usdt_balance) || 0;
+            gameData.miningPower = gameDataDB.mining_power || 10;
+            gameData.userLevel = gameDataDB.user_level || 1;
+            gameData.totalMined = gameDataDB.total_mined || 0;
+            gameData.todayEarnings = gameDataDB.today_earnings || 0;
+            gameData.usdtProgress = gameDataDB.usdt_progress || 0;
+            gameData.boostActive = gameDataDB.boost_active || false;
+            gameData.boostEndTime = gameDataDB.boost_end_time ? 
+                new Date(gameDataDB.boost_end_time).getTime() : 0;
+            gameData.lastClaimTime = gameDataDB.last_claim_time;
+            
+            // همزمان در localStorage هم ذخیره کن
+            localStorage.setItem('sodmaxProData', JSON.stringify(gameData));
+            
+            // دریافت پلن فعال
+            const { data: activePlan, error: planError } = await supabase
+                .from('user_plans')
+                .select('*')
+                .eq('user_id', window.currentUser.id)
+                .eq('is_active', true)
+                .single();
+
+            if (activePlan && !planError) {
+                gameData.activePlan = {
+                    id: activePlan.plan_id,
+                    name: activePlan.plan_name,
+                    price: activePlan.price,
+                    multiplier: activePlan.multiplier,
+                    autoSpeed: activePlan.auto_speed,
+                    usdtBonus: activePlan.usdt_bonus
+                };
+            }
+            
+            // دریافت تراکنش‌ها
+            await loadUserTransactions(window.currentUser.id);
+            
+            return true;
+        }
+    } catch (error) {
+        console.error('خطا در بارگذاری از دیتابیس:', error);
+    }
+    
+    return false;
+}
+
+/**
+ * مهاجرت داده‌های قدیمی
+ */
+function migrateOldData(data) {
+    // اگر نسخه قدیمی‌تر از 2.0 هست
+    if (!data.version || data.version < '2.0') {
+        console.log('🔄 در حال مهاجرت داده‌های قدیمی...');
+        
+        // تبدیل داده‌های قدیمی به جدید
+        if (data.balance !== undefined) {
+            data.sodBalance = data.balance;
+            delete data.balance;
+        }
+        
+        if (data.power !== undefined) {
+            data.miningPower = data.power;
+            delete data.power;
+        }
+        
+        data.version = '3.0';
+    }
+}
+
+/**
+ * فعال کردن حالت آفلاین
+ */
+function enableOfflineMode() {
+    console.log('🔌 فعال کردن حالت آفلاین');
+    
+    window.isOfflineMode = true;
+    
+    // نمایش نوتیفیکیشن به کاربر
+    showNotification('📡 حالت آفلاین', 'در حال حاضر به دیتابیس متصل نیستید. داده‌ها فقط محلی ذخیره می‌شوند.');
+    
+    // تغییر متن ویجت
+    updateFloatingWidget();
+}
+
+/**
+ * همگام‌سازی داده‌های محلی با دیتابیس
+ */
+async function syncLocalDataWithDatabase() {
+    if (!window.currentUser || !window.supabase || window.isOfflineMode) {
+        return;
+    }
+    
+    try {
+        console.log('🔄 همگام‌سازی داده‌های محلی با دیتابیس...');
+        
+        // ۱. بارگذاری از localStorage
+        const saved = localStorage.getItem('sodmaxProData');
+        if (!saved) return;
+        
+        const localData = JSON.parse(saved);
+        
+        // ۲. بارگذاری از دیتابیس
+        const { data: dbData, error } = await supabase
+            .from('user_game_data')
+            .select('sod_balance, usdt_balance, total_mined, updated_at')
+            .eq('user_id', window.currentUser.id)
+            .single();
+        
+        if (error) throw error;
+        
+        // ۳. مقایسه و انتخاب جدیدترین داده
+        if (dbData) {
+            const dbTime = new Date(dbData.updated_at).getTime();
+            const localTime = parseInt(localStorage.getItem('sodmaxLastSave') || '0');
+            
+            if (localTime > dbTime) {
+                // داده‌های محلی جدیدتر هستند
+                console.log('💾 داده‌های محلی جدیدتر هستند، در حال آپدیت دیتابیس...');
+                await saveGameToDatabase();
+            } else if (dbTime > localTime) {
+                // داده‌های دیتابیس جدیدتر هستند
+                console.log('💾 داده‌های دیتابیس جدیدتر هستند، در حال آپدیت localStorage...');
+                await loadFromDatabase();
+                updateUI();
+            }
+        } else {
+            // هیچ داده‌ای در دیتابیس نیست، داده‌های محلی رو ذخیره کن
+            console.log('💾 ذخیره داده‌های محلی در دیتابیس...');
+            await saveGameToDatabase();
+        }
+        
+    } catch (error) {
+        console.error('خطا در همگام‌سازی:', error);
+        enableOfflineMode();
+    }
+}
+
+// ==================== بخش ۴: توابع احراز هویت ====================
+async function handleAuth() {
+    try {
+        // اول از localStorage چک کن اگر کاربری ذخیره شده
+        const savedUser = localStorage.getItem('sodmaxUser');
+        if (savedUser && !window.supabaseConfigured) {
+            console.log('👤 کاربر از localStorage تشخیص داده شد');
+            const userData = JSON.parse(savedUser);
+            window.currentUser = { id: 'local-' + userData.email, email: userData.email };
+            updateNavForLoggedInUser();
+            return true;
+        }
+        
+        // اگر Supabase وصل هست
+        if (window.supabase && window.supabaseConfigured) {
+            const { data: { session }, error } = await supabase.auth.getSession();
+            
+            if (error) throw error;
+            
+            if (session) {
+                window.currentUser = session.user;
+                await loadUserData(session.user.id);
+                updateNavForLoggedInUser();
+                return true;
+            }
+        }
+        
+        // کاربر وارد نشده
+        setTimeout(() => {
+            showLoginModal();
+        }, 1000);
+        return false;
+        
+    } catch (error) {
+        console.error('خطا در احراز هویت:', error);
+        
+        // حالت آفلاین رو فعال کن
+        enableOfflineMode();
+        
+        // کاربر رو به صورت مهمان دربیار
+        window.currentUser = null;
+        updateNavForLoggedOutUser();
+        
+        setTimeout(() => {
+            showLoginModal();
+        }, 1000);
+        return false;
+    }
+}
+
+async function signUp(email, password, username) {
+    try {
+        // اگر Supabase وصل نیست، حالت آفلاین
+        if (!window.supabase || !window.supabaseConfigured) {
+            console.log('🔌 ثبت‌نام در حالت آفلاین');
+            
+            // ذخیره کاربر در localStorage
+            const userData = {
+                email: email,
+                username: username,
+                lastLogin: new Date().toISOString()
+            };
+            localStorage.setItem('sodmaxUser', JSON.stringify(userData));
+            
+            window.currentUser = { 
+                id: 'local-' + email, 
+                email: email 
+            };
+            
+            enableOfflineMode();
+            showNotification('🎉 ثبت‌نام موفق (آفلاین)', 'حساب کاربری شما ایجاد شد.');
+            closeAuthModal();
+            updateNavForLoggedInUser();
+            return true;
+        }
+        
+        const { data, error } = await supabase.auth.signUp({
+            email,
+            password,
+            options: {
+                data: {
+                    username: username
+                }
+            }
+        });
+
+        if (error) throw error;
+
+        if (data.user) {
+            // ایجاد رکورد کاربر در جدول users
+            const { error: dbError } = await supabase
+                .from('users')
+                .insert([
+                    {
+                        id: data.user.id,
+                        email: email,
+                        username: username,
+                        created_at: new Date().toISOString()
+                    }
+                ]);
+
+            if (dbError) throw dbError;
+
+            // ایجاد رکورد داده بازی
+            const { error: gameError } = await supabase
+                .from('user_game_data')
+                .insert([
+                    {
+                        user_id: data.user.id,
+                        sod_balance: 0,
+                        usdt_balance: 0,
+                        mining_power: 10,
+                        user_level: 1,
+                        updated_at: new Date().toISOString()
+                    }
+                ]);
+
+            if (gameError) throw gameError;
+
+            window.currentUser = data.user;
+            
+            // ذخیره در localStorage برای حالت آفلاین
+            localStorage.setItem('sodmaxUser', JSON.stringify({
+                email: data.user.email,
+                id: data.user.id,
+                username: username,
+                lastLogin: new Date().toISOString()
+            }));
+            
+            showNotification('🎉 ثبت‌نام موفق', 'حساب کاربری شما با موفقیت ایجاد شد!');
+            closeAuthModal();
+            updateNavForLoggedInUser();
+            return true;
+        }
+    } catch (error) {
+        console.error('خطا در ثبت‌نام:', error);
+        showNotification('❌ خطا در ثبت‌نام', error.message);
+        return false;
+    }
+}
+
+async function signIn(email, password) {
+    try {
+        // اگر Supabase وصل نیست، حالت آفلاین
+        if (!window.supabase || !window.supabaseConfigured) {
+            console.log('🔌 ورود در حالت آفلاین');
+            
+            // ذخیره کاربر در localStorage
+            const userData = {
+                email: email,
+                username: email.split('@')[0],
+                lastLogin: new Date().toISOString()
+            };
+            localStorage.setItem('sodmaxUser', JSON.stringify(userData));
+            
+            window.currentUser = { 
+                id: 'local-' + email, 
+                email: email 
+            };
+            
+            enableOfflineMode();
+            showNotification('👋 خوش آمدید (آفلاین)', 'شما در حالت آفلاین وارد شدید.');
+            closeAuthModal();
+            updateNavForLoggedInUser();
+            return true;
+        }
+        
+        // ورود عادی با Supabase
+        const { data, error } = await supabase.auth.signInWithPassword({
+            email,
+            password
+        });
+
+        if (error) throw error;
+
+        if (data.user) {
+            window.currentUser = data.user;
+            
+            // ذخیره در localStorage برای حالت آفلاین
+            localStorage.setItem('sodmaxUser', JSON.stringify({
+                email: data.user.email,
+                id: data.user.id,
+                lastLogin: new Date().toISOString()
+            }));
+            
+            // آپدیت دیتابیس
+            await supabase
+                .from('users')
+                .update({ last_login: new Date().toISOString() })
+                .eq('id', window.currentUser.id);
+
+            await loadUserData(window.currentUser.id);
+            showNotification('👋 خوش آمدید', 'با موفقیت وارد شدید!');
+            closeAuthModal();
+            updateNavForLoggedInUser();
+            return true;
+        }
+    } catch (error) {
+        console.error('خطا در ورود:', error);
+        showNotification('❌ خطا در ورود', 'ایمیل یا رمز عبور نادرست است');
+        return false;
+    }
+}
+
+async function signOut() {
+    try {
+        // اگر Supabase وصل هست
+        if (window.supabase && window.supabaseConfigured) {
+            const { error } = await supabase.auth.signOut();
+            if (error) throw error;
+        }
+        
+        window.currentUser = null;
+        localStorage.removeItem('sodmaxUser');
+        gameData.sodBalance = 0;
+        gameData.usdtBalance = 0;
+        gameData.todayEarnings = 0;
+        updateUI();
+        
+        showNotification('👋 خدانگهدار', 'با موفقیت خارج شدید');
+        updateNavForLoggedOutUser();
+        
+        setTimeout(() => {
+            showLoginModal();
+        }, 1000);
+    } catch (error) {
+        console.error('خطا در خروج:', error);
+    }
+}
+
+async function loadUserData(userId) {
+    try {
+        // دریافت داده‌های بازی کاربر
+        const { data: gameDataDB, error: gameError } = await supabase
+            .from('user_game_data')
+            .select('*')
+            .eq('user_id', userId)
+            .single();
+
+        if (!gameError && gameDataDB) {
+            gameData.sodBalance = gameDataDB.sod_balance || 0;
+            gameData.usdtBalance = parseFloat(gameDataDB.usdt_balance) || 0;
+            gameData.miningPower = gameDataDB.mining_power || 10;
+            gameData.userLevel = gameDataDB.user_level || 1;
+            gameData.totalMined = gameDataDB.total_mined || 0;
+            gameData.todayEarnings = gameDataDB.today_earnings || 0;
+            gameData.usdtProgress = gameDataDB.usdt_progress || 0;
+            gameData.boostActive = gameDataDB.boost_active || false;
+            gameData.boostEndTime = gameDataDB.boost_end_time ? new Date(gameDataDB.boost_end_time).getTime() : 0;
+        }
+
+        // دریافت پلن فعال کاربر
+        const { data: activePlan, error: planError } = await supabase
+            .from('user_plans')
+            .select('*')
+            .eq('user_id', userId)
+            .eq('is_active', true)
+            .single();
+
+        if (activePlan && !planError) {
+            gameData.activePlan = {
+                id: activePlan.plan_id,
+                name: activePlan.plan_name,
+                price: activePlan.price,
+                multiplier: activePlan.multiplier,
+                autoSpeed: activePlan.auto_speed,
+                usdtBonus: activePlan.usdt_bonus
+            };
+        }
+
+        // دریافت آخرین تراکنش‌ها
+        await loadUserTransactions(userId);
+
+        updateUI();
+
+    } catch (error) {
+        console.error('خطا در بارگذاری داده‌های کاربر:', error);
+    }
+}
+
+async function saveGameToDatabase() {
+    if (!window.currentUser) return;
+
+    try {
+        const { error } = await supabase
+            .from('user_game_data')
+            .upsert([
+                {
+                    user_id: window.currentUser.id,
+                    sod_balance: gameData.sodBalance,
+                    usdt_balance: gameData.usdtBalance,
+                    mining_power: gameData.miningPower,
+                    user_level: gameData.userLevel,
+                    total_mined: gameData.totalMined,
+                    today_earnings: gameData.todayEarnings,
+                    usdt_progress: gameData.usdtProgress,
+                    active_plan_id: gameData.activePlan?.id || null,
+                    boost_active: gameData.boostActive,
+                    boost_end_time: gameData.boostActive ? new Date(gameData.boostEndTime).toISOString() : null,
+                    last_claim_time: gameData.lastClaimTime,
+                    updated_at: new Date().toISOString()
+                }
+            ]);
+
+        if (error) throw error;
+    } catch (error) {
+        console.error('خطا در ذخیره داده‌های بازی:', error);
+        throw error;
+    }
+}
+
+async function saveTransactionToDB(description, amount, type) {
+    if (!window.currentUser) return;
+
+    try {
+        const { error } = await supabase
+            .from('transactions')
+            .insert([
+                {
+                    user_id: window.currentUser.id,
+                    description: description,
+                    amount: Math.abs(amount),
+                    type: type,
+                    status: 'completed',
+                    created_at: new Date().toISOString()
+                }
+            ]);
+
+        if (error) throw error;
+    } catch (error) {
+        console.error('خطا در ذخیره تراکنش:', error);
+    }
+}
+
+async function loadUserTransactions(userId) {
+    try {
+        const { data: transactions, error } = await supabase
+            .from('transactions')
+            .select('*')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false })
+            .limit(10);
+
+        if (!error && transactions) {
+            gameData.transactions = transactions.map(tx => ({
+                description: tx.description,
+                amount: tx.amount,
+                type: tx.type,
+                time: new Date(tx.created_at).toLocaleString('fa-IR')
+            }));
+        }
+    } catch (error) {
+        console.error('خطا در بارگذاری تراکنش‌ها:', error);
+    }
+}
+
+async function savePlanPurchase(plan) {
+    if (!window.currentUser) return;
+
+    try {
+        const expiresAt = new Date();
+        expiresAt.setMonth(expiresAt.getMonth() + 1); // 1 ماه اعتبار
+
+        const { error } = await supabase
+            .from('user_plans')
+            .insert([
+                {
+                    user_id: window.currentUser.id,
+                    plan_id: plan.id,
+                    plan_name: plan.name,
+                    price: plan.price,
+                    multiplier: plan.multiplier,
+                    auto_speed: plan.autoSpeed,
+                    usdt_bonus: plan.usdtBonus,
+                    purchased_at: new Date().toISOString(),
+                    expires_at: expiresAt.toISOString(),
+                    is_active: true
+                }
+            ]);
+
+        if (error) throw error;
+
+        // غیرفعال کردن پلن‌های قبلی
+        await supabase
+            .from('user_plans')
+            .update({ is_active: false })
+            .eq('user_id', window.currentUser.id)
+            .neq('plan_id', plan.id);
+
+    } catch (error) {
+        console.error('خطا در ذخیره خرید پلن:', error);
+    }
+}
+
+// ==================== بخش ۵: مودال ورود/ثبت‌نام ====================
+function showLoginModal() {
+    // اگر مودال قبلاً نمایش داده شده، نمایش نده
+    if (document.getElementById('authModal')) return;
+    
+    const modalHTML = `
+        <div class="modal-overlay" id="authModal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>ورود / ثبت‌نام</h3>
+                    <button class="modal-close" onclick="closeAuthModal()">×</button>
+                </div>
+                
+                <div class="modal-body">
+                    <div class="auth-tabs">
+                        <button class="auth-tab active" onclick="switchAuthTab('login')">ورود</button>
+                        <button class="auth-tab" onclick="switchAuthTab('signup')">ثبت‌نام</button>
+                    </div>
+                    
+                    <form id="loginForm" class="auth-form active">
+                        <div class="form-group">
+                            <label>ایمیل</label>
+                            <input type="email" id="loginEmail" required placeholder="example@gmail.com">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>رمز عبور</label>
+                            <input type="password" id="loginPassword" required placeholder="••••••••">
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary btn-block">
+                            <i class="fas fa-sign-in-alt"></i>
+                            ورود به حساب
+                        </button>
+                    </form>
+                    
+                    <form id="signupForm" class="auth-form">
+                        <div class="form-group">
+                            <label>نام کاربری</label>
+                            <input type="text" id="signupUsername" required placeholder="username">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>ایمیل</label>
+                            <input type="email" id="signupEmail" required placeholder="example@gmail.com">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>رمز عبور</label>
+                            <input type="password" id="signupPassword" required placeholder="••••••••">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>تکرار رمز عبور</label>
+                            <input type="password" id="signupPasswordConfirm" required placeholder="••••••••">
+                        </div>
+                        
+                        <button type="submit" class="btn btn-success btn-block">
+                            <i class="fas fa-user-plus"></i>
+                            ایجاد حساب کاربری
+                        </button>
+                    </form>
+                    
+                    <div class="auth-divider">
+                        <span>یا</span>
+                    </div>
+                    
+                    <button class="btn btn-outline btn-block" onclick="connectWallet()">
+                        <i class="fas fa-wallet"></i>
+                        ورود با کیف پول
+                    </button>
+                </div>
+                
+                <div class="modal-footer">
+                    <p class="text-center">
+                        با ورود یا ثبت‌نام، <a href="#">قوانین و شرایط</a> را می‌پذیرید.
+                    </p>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+    
+    // اضافه کردن event listeners برای فرم‌ها
+    setTimeout(() => {
+        const loginForm = document.getElementById('loginForm');
+        const signupForm = document.getElementById('signupForm');
+        
+        if (loginForm) {
+            loginForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                const email = document.getElementById('loginEmail').value;
+                const password = document.getElementById('loginPassword').value;
+                signIn(email, password);
+            });
+        }
+        
+        if (signupForm) {
+            signupForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                const username = document.getElementById('signupUsername').value;
+                const email = document.getElementById('signupEmail').value;
+                const password = document.getElementById('signupPassword').value;
+                const confirmPassword = document.getElementById('signupPasswordConfirm').value;
+                
+                if (password !== confirmPassword) {
+                    showNotification('❌ خطا', 'رمز عبور و تکرار آن مطابقت ندارند.');
+                    return;
+                }
+                
+                signUp(email, password, username);
+            });
+        }
+    }, 100);
+}
+
+function closeAuthModal() {
+    const modal = document.getElementById('authModal');
+    if (modal) modal.remove();
+}
+
 function switchAuthTab(tab) {
     const loginForm = document.getElementById('loginForm');
     const signupForm = document.getElementById('signupForm');
     const loginTab = document.querySelector('.auth-tabs button:nth-child(1)');
     const signupTab = document.querySelector('.auth-tabs button:nth-child(2)');
+    
+    if (!loginForm || !signupForm || !loginTab || !signupTab) return;
     
     if (tab === 'login') {
         loginForm.classList.add('active');
@@ -20,12 +903,19 @@ function switchAuthTab(tab) {
 // ==================== بخش ۶: تابع‌های اصلی بازی ====================
 function updateUI() {
     // به‌روزرسانی موجودی‌ها
-    document.getElementById('sodBalance').textContent = formatNumber(gameData.sodBalance);
-    document.getElementById('usdtBalance').textContent = formatNumber(gameData.usdtBalance);
-    document.getElementById('todayEarnings').textContent = formatNumber(gameData.todayEarnings);
-    document.getElementById('totalMined').textContent = formatNumber(gameData.totalMined);
-    document.getElementById('miningPower').textContent = formatNumber(gameData.miningPower);
-    document.getElementById('userLevel').textContent = gameData.userLevel;
+    const sodBalanceEl = document.getElementById('sodBalance');
+    const usdtBalanceEl = document.getElementById('usdtBalance');
+    const todayEarningsEl = document.getElementById('todayEarnings');
+    const totalMinedEl = document.getElementById('totalMined');
+    const miningPowerEl = document.getElementById('miningPower');
+    const userLevelEl = document.getElementById('userLevel');
+    
+    if (sodBalanceEl) sodBalanceEl.textContent = formatNumber(gameData.sodBalance);
+    if (usdtBalanceEl) usdtBalanceEl.textContent = formatNumber(gameData.usdtBalance);
+    if (todayEarningsEl) todayEarningsEl.textContent = formatNumber(gameData.todayEarnings);
+    if (totalMinedEl) totalMinedEl.textContent = formatNumber(gameData.totalMined);
+    if (miningPowerEl) miningPowerEl.textContent = formatNumber(gameData.miningPower);
+    if (userLevelEl) userLevelEl.textContent = gameData.userLevel;
     
     // به‌روزرسانی پیشرفت USDT
     const usdtProgressBar = document.getElementById('usdtProgressBar');
@@ -95,6 +985,26 @@ function updateActivePlanDisplay() {
         if (planName) planName.textContent = 'استارتر (رایگان)';
         if (autoMiningStatus) autoMiningStatus.textContent = 'غیرفعال';
         if (multiplierDisplay) multiplierDisplay.textContent = '1x';
+        
+        // به‌روزرسانی کلیدهای پلن
+        document.querySelectorAll('.plan-card').forEach(card => {
+            const planId = parseInt(card.dataset.planId);
+            const btn = card.querySelector('.btn-plan');
+            
+            if (btn) {
+                if (planId === 1) {
+                    btn.textContent = 'فعال‌سازی رایگان';
+                    btn.classList.add('btn-primary');
+                    btn.classList.remove('btn-success');
+                    btn.disabled = false;
+                } else {
+                    btn.textContent = 'خرید پلن';
+                    btn.classList.add('btn-primary');
+                    btn.classList.remove('btn-success');
+                    btn.disabled = false;
+                }
+            }
+        });
     }
 }
 
@@ -104,7 +1014,7 @@ function updateTransactionsList() {
     
     container.innerHTML = '';
     
-    if (gameData.transactions.length === 0) {
+    if (!gameData.transactions || gameData.transactions.length === 0) {
         container.innerHTML = `
             <div class="transaction-item empty">
                 <i class="fas fa-exchange-alt"></i>
@@ -292,6 +1202,13 @@ function showFloatingText(amount) {
     const floatingText = document.createElement('div');
     floatingText.className = 'floating-earnings';
     floatingText.textContent = `+${formatNumber(amount)} SOD`;
+    floatingText.style.position = 'fixed';
+    floatingText.style.zIndex = '9999';
+    floatingText.style.color = '#4CAF50';
+    floatingText.style.fontWeight = 'bold';
+    floatingText.style.fontSize = '18px';
+    floatingText.style.pointerEvents = 'none';
+    floatingText.style.animation = 'floatUp 1s ease-out forwards';
     
     // موقعیت تصادفی حول دکمه استخراج
     const mineBtn = document.getElementById('mineBtn');
@@ -308,7 +1225,9 @@ function showFloatingText(amount) {
     
     // حذف بعد از انیمیشن
     setTimeout(() => {
-        floatingText.remove();
+        if (floatingText.parentNode) {
+            floatingText.remove();
+        }
     }, 1000);
 }
 
@@ -514,6 +1433,9 @@ function activateFreePlan(plan) {
 }
 
 function showPurchaseModal(plan) {
+    // اگر مودال خرید قبلاً وجود دارد، حذف کن
+    closeModal('purchaseModal');
+    
     const modalHTML = `
         <div class="modal-overlay" id="purchaseModal">
             <div class="modal-content">
@@ -645,19 +1567,7 @@ function processPlanPurchase(planId) {
 }
 
 // ==================== بخش ۹: مدیریت رویدادها ====================
-document.addEventListener('DOMContentLoaded', async function() {
-    // بارگذاری بازی
-    await loadGame();
-    
-    // بررسی احراز هویت
-    await handleAuth();
-    
-    // به‌روزرسانی UI
-    updateUI();
-    
-    // شروع تایمرهای خودکار
-    startTimers();
-    
+function setupEventListeners() {
     // تنظیم رویداد کلیک برای استخراج
     const mineBtn = document.getElementById('mineBtn');
     if (mineBtn) {
@@ -691,40 +1601,15 @@ document.addEventListener('DOMContentLoaded', async function() {
     // تنظیم رویدادهای پلن‌ها
     document.querySelectorAll('.btn-plan').forEach(btn => {
         btn.addEventListener('click', function() {
-            const planId = parseInt(this.closest('.plan-card').dataset.planId);
-            activatePlan(planId);
+            const planCard = this.closest('.plan-card');
+            if (!planCard) return;
+            
+            const planId = parseInt(planCard.dataset.planId);
+            if (!isNaN(planId)) {
+                activatePlan(planId);
+            }
         });
     });
-    
-    // تنظیم فرم‌های احراز هویت
-    const loginForm = document.getElementById('loginForm');
-    const signupForm = document.getElementById('signupForm');
-    
-    if (loginForm) {
-        loginForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            const email = document.getElementById('loginEmail').value;
-            const password = document.getElementById('loginPassword').value;
-            signIn(email, password);
-        });
-    }
-    
-    if (signupForm) {
-        signupForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            const username = document.getElementById('signupUsername').value;
-            const email = document.getElementById('signupEmail').value;
-            const password = document.getElementById('signupPassword').value;
-            const confirmPassword = document.getElementById('signupPasswordConfirm').value;
-            
-            if (password !== confirmPassword) {
-                showNotification('❌ خطا', 'رمز عبور و تکرار آن مطابقت ندارند.');
-                return;
-            }
-            
-            signUp(email, password, username);
-        });
-    }
     
     // تنظیم دکمه خروج
     const logoutBtn = document.getElementById('logoutBtn');
@@ -750,41 +1635,22 @@ document.addEventListener('DOMContentLoaded', async function() {
             }
         });
     }
-});
-
-function startTimers() {
-    // تایمر خودکار استخراج
-    setInterval(() => {
-        if (gameData.autoMining && gameData.activePlan && gameData.activePlan.autoSpeed > 0) {
-            const earnings = gameData.activePlan.autoSpeed;
-            gameData.sodBalance += earnings;
-            gameData.totalMined += earnings;
-            gameData.todayEarnings += earnings;
+    
+    // کلیک روی صفحه برای استخراج (جایگزین)
+    document.body.addEventListener('click', function(e) {
+        // اگر روی دکمه استخراج کلیک نشده و روی المان خاصی نباشد
+        if (!e.target.closest('#mineBtn') && 
+            !e.target.closest('.modal') && 
+            !e.target.closest('a') && 
+            !e.target.closest('button') &&
+            e.target.isContentEditable !== true) {
             
-            // به‌روزرسانی هر 10 ثانیه
-            if (Date.now() % 10000 < 100) {
-                saveGame();
-                updateUI();
+            // 10% شانس برای استخراج با کلیک عادی
+            if (Math.random() < 0.1) {
+                mineSOD();
             }
         }
-    }, 1000);
-    
-    // تایمر به‌روزرسانی وضعیت تقویت
-    setInterval(() => {
-        updateBoostStatus();
-    }, 1000);
-    
-    // تایمر ذخیره‌سازی خودکار
-    setInterval(() => {
-        saveGame();
-    }, 30000); // هر 30 ثانیه
-    
-    // تایمر همگام‌سازی با دیتابیس
-    setInterval(() => {
-        if (window.currentUser && !window.isOfflineMode) {
-            syncLocalDataWithDatabase();
-        }
-    }, 60000); // هر 1 دقیقه
+    });
 }
 
 // ==================== بخش ۱۰: تابع‌های کمکی ====================
@@ -856,6 +1722,7 @@ function exportGameData() {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+    URL.revokeObjectURL(url);
     
     showNotification('💾 پشتیبان‌گیری', 'داده‌های بازی با موفقیت ذخیره شدند.');
 }
@@ -913,14 +1780,12 @@ function resetGame() {
         localStorage.removeItem('sodmaxLastPlayed');
         
         // پاک کردن دیتابیس (اگر کاربر وارد شده)
-        if (window.currentUser && !window.isOfflineMode) {
+        if (window.currentUser && !window.isOfflineMode && window.supabase) {
             // غیرفعال کردن همه پلن‌ها
-            if (window.supabase) {
-                supabase
-                    .from('user_plans')
-                    .update({ is_active: false })
-                    .eq('user_id', window.currentUser.id);
-            }
+            supabase
+                .from('user_plans')
+                .update({ is_active: false })
+                .eq('user_id', window.currentUser.id);
         }
         
         saveGame();
@@ -930,14 +1795,88 @@ function resetGame() {
     }
 }
 
-// ==================== بخش ۱۱: راه‌اندازی اولیه ====================
-// صبر کن تا DOM کاملاً بارگذاری شود
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initializeGame);
-} else {
-    initializeGame();
+// ==================== بخش ۱۱: تابع‌های آماری و گزارش‌گیری ====================
+function getGameStats() {
+    return {
+        version: window.gameVersion || 'unknown',
+        playTime: calculatePlayTime(),
+        efficiency: calculateMiningEfficiency(),
+        achievements: getAchievements(),
+        nextMilestone: getNextMilestone(),
+        estimatedDailyEarnings: calculateDailyEarnings()
+    };
 }
 
+function calculatePlayTime() {
+    const firstPlay = localStorage.getItem('sodmaxFirstPlay');
+    if (!firstPlay) {
+        localStorage.setItem('sodmaxFirstPlay', Date.now());
+        return '0 دقیقه';
+    }
+    
+    const minutes = Math.floor((Date.now() - parseInt(firstPlay)) / 60000);
+    
+    if (minutes < 60) {
+        return `${minutes} دقیقه`;
+    } else if (minutes < 1440) {
+        return `${Math.floor(minutes / 60)} ساعت`;
+    } else {
+        return `${Math.floor(minutes / 1440)} روز`;
+    }
+}
+
+function calculateMiningEfficiency() {
+    if (!gameData.totalMined || gameData.totalMined === 0) return 0;
+    
+    const firstPlay = parseInt(localStorage.getItem('sodmaxFirstPlay') || Date.now());
+    const minutes = Math.max(1, (Date.now() - firstPlay) / 60000);
+    
+    return Math.floor(gameData.totalMined / minutes);
+}
+
+function getAchievements() {
+    const achievements = [];
+    
+    if (gameData.totalMined >= 1000) achievements.push('استخراج‌کننده مبتدی');
+    if (gameData.totalMined >= 10000) achievements.push('استخراج‌کننده حرفه‌ای');
+    if (gameData.totalMined >= 100000) achievements.push('استخراج‌کننده افسانه‌ای');
+    if (gameData.userLevel >= 10) achievements.push('سطح بالا');
+    if (gameData.userLevel >= 50) achievements.push('کاربر VIP');
+    if (gameData.activePlan && gameData.activePlan.id === 4) achievements.push('صاحب پلن الماس');
+    
+    return achievements;
+}
+
+function getNextMilestone() {
+    if (gameData.totalMined < 1000) {
+        return { target: 1000, type: 'SOD', reward: 'دریافت 100 SOD اضافی' };
+    } else if (gameData.totalMined < 10000) {
+        return { target: 10000, type: 'SOD', reward: 'قدرت استخراج 2x به مدت 1 ساعت' };
+    } else if (gameData.totalMined < 100000) {
+        return { target: 100000, type: 'SOD', reward: 'دریافت 1 USDT رایگان' };
+    } else {
+        return { target: 1000000, type: 'SOD', reward: 'دسترسی به ویژگی‌های ویژه' };
+    }
+}
+
+function calculateDailyEarnings() {
+    const baseEarnings = gameData.miningPower * 3600 * 24; // فرض 24 ساعت کلیک
+    let total = baseEarnings;
+    
+    // اعمال پلن
+    if (gameData.activePlan) {
+        total *= gameData.activePlan.multiplier;
+    }
+    
+    // اعمال استخراج خودکار
+    if (gameData.autoMining && gameData.activePlan) {
+        total += gameData.activePlan.autoSpeed * 3600 * 24;
+    }
+    
+    return Math.floor(total);
+}
+
+// ==================== بخش ۱۲: راه‌اندازی اولیه ====================
 async function initializeGame() {
     console.log('🎮 شروع بازی SODMax...');
     
@@ -956,7 +1895,7 @@ async function initializeGame() {
     await handleAuth();
     
     // تنظیم رویدادهای کلیک
-    setupClickEvents();
+    setupEventListeners();
     
     // شروع تایمرهای خودکار
     startTimers();
@@ -974,25 +1913,42 @@ async function initializeGame() {
     console.log('✅ بازی آماده است!');
 }
 
-function setupClickEvents() {
-    // کلیک روی صفحه برای استخراج (جایگزین)
-    document.body.addEventListener('click', function(e) {
-        // اگر روی دکمه استخراج کلیک نشده و روی المان خاصی نباشد
-        if (!e.target.closest('#mineBtn') && 
-            !e.target.closest('.modal') && 
-            !e.target.closest('a') && 
-            !e.target.closest('button') &&
-            e.target.isContentEditable !== true) {
+function startTimers() {
+    // تایمر خودکار استخراج
+    setInterval(() => {
+        if (gameData.autoMining && gameData.activePlan && gameData.activePlan.autoSpeed > 0) {
+            const earnings = gameData.activePlan.autoSpeed;
+            gameData.sodBalance += earnings;
+            gameData.totalMined += earnings;
+            gameData.todayEarnings += earnings;
             
-            // 10% شانس برای استخراج با کلیک عادی
-            if (Math.random() < 0.1) {
-                mineSOD();
+            // به‌روزرسانی هر 10 ثانیه
+            if (Date.now() % 10000 < 100) {
+                saveGame();
+                updateUI();
             }
         }
-    });
+    }, 1000);
+    
+    // تایمر به‌روزرسانی وضعیت تقویت
+    setInterval(() => {
+        updateBoostStatus();
+    }, 1000);
+    
+    // تایمر ذخیره‌سازی خودکار
+    setInterval(() => {
+        saveGame();
+    }, 30000); // هر 30 ثانیه
+    
+    // تایمر همگام‌سازی با دیتابیس
+    setInterval(() => {
+        if (window.currentUser && !window.isOfflineMode) {
+            syncLocalDataWithDatabase();
+        }
+    }, 60000); // هر 1 دقیقه
 }
 
-// ==================== بخش ۱۲: تابع‌های مربوط به شبکه ====================
+// ==================== بخش ۱۳: تابع‌های مربوط به شبکه ====================
 async function checkNetworkStatus() {
     try {
         const online = navigator.onLine;
@@ -1038,22 +1994,98 @@ async function checkNetworkStatus() {
     }
 }
 
-// بررسی دوره‌ای وضعیت شبکه
-setInterval(checkNetworkStatus, 30000);
+// ==================== بخش ۱۴: رویدادهای ویژه و فصلی ====================
+function checkForSpecialEvents() {
+    const now = new Date();
+    const events = [];
+    
+    // رویداد سال نو
+    if (now.getMonth() === 0 && now.getDate() === 1) {
+        events.push({
+            name: 'سال نو',
+            bonus: 2.0,
+            message: 'سال نو مبارک! استخراج ۲ برابر شده است!'
+        });
+    }
+    
+    // رویداد کریسمس
+    if (now.getMonth() === 11 && now.getDate() >= 20 && now.getDate() <= 26) {
+        events.push({
+            name: 'کریسمس',
+            bonus: 1.5,
+            message: 'کریسمس مبارک! ۵۰٪ پاداش اضافی دریافت کنید!'
+        });
+    }
+    
+    // رویداد تعطیلات آخر هفته
+    if (now.getDay() === 0 || now.getDay() === 6) {
+        events.push({
+            name: 'آخر هفته',
+            bonus: 1.2,
+            message: 'تعطیلات آخر هفته! ۲۰٪ پاداش اضافی'
+        });
+    }
+    
+    return events;
+}
 
-// رویدادهای آنلاین/آفلاین مرورگر
-window.addEventListener('online', () => {
-    showNotification('📡 اتصال برقرار شد', 'در حال همگام‌سازی...');
-    checkNetworkStatus();
+function applyEventBonuses(earnings) {
+    const events = checkForSpecialEvents();
+    
+    events.forEach(event => {
+        earnings *= event.bonus;
+        showNotification(`🎉 ${event.name}`, event.message);
+    });
+    
+    return earnings;
+}
+
+// ==================== بخش ۱۵: راه‌اندازی نهایی ====================
+// صبر کن تا DOM کاملاً بارگذاری شود
+document.addEventListener('DOMContentLoaded', function() {
+    // صبر کن تا همه چیز بارگذاری شود
+    window.addEventListener('load', async function() {
+        console.log('🚀 بازی SODMax کاملاً بارگذاری شد');
+        
+        // راه‌اندازی بازی
+        await initializeGame();
+        
+        // اعمال رویدادهای ویژه
+        const events = checkForSpecialEvents();
+        if (events.length > 0) {
+            events.forEach(event => {
+                showNotification(`🎊 ${event.name}`, event.message);
+            });
+        }
+        
+        // نمایش آمار اولیه با تاخیر
+        setTimeout(() => {
+            try {
+                const stats = getGameStats();
+                console.log('📊 آمار بازی:', stats);
+            } catch (error) {
+                console.warn('خطا در نمایش آمار:', error);
+            }
+        }, 3000);
+        
+        // بررسی دوره‌ای وضعیت شبکه
+        setInterval(checkNetworkStatus, 30000);
+        
+        // رویدادهای آنلاین/آفلاین مرورگر
+        window.addEventListener('online', () => {
+            showNotification('📡 اتصال برقرار شد', 'در حال همگام‌سازی...');
+            checkNetworkStatus();
+        });
+        
+        window.addEventListener('offline', () => {
+            showNotification('📡 قطع اتصال', 'شما در حالت آفلاین هستید.');
+            window.isOfflineMode = true;
+            updateFloatingWidget();
+        });
+    });
 });
 
-window.addEventListener('offline', () => {
-    showNotification('📡 قطع اتصال', 'شما در حالت آفلاین هستید.');
-    window.isOfflineMode = true;
-    updateFloatingWidget();
-});
-
-// ==================== بخش ۱۳: تابع‌های مربوط به توسعه و دیباگ ====================
+// ==================== بخش ۱۶: تابع‌های مربوط به توسعه و دیباگ ====================
 // فقط در حالت توسعه فعال شود
 if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
     window.enableCheats = function() {
@@ -1120,10 +2152,10 @@ if (window.location.hostname === 'localhost' || window.location.hostname === '12
                 }
             </style>
             <strong>🧪 حالت توسعه</strong><br>
-            <button class="cheat-btn" onclick="cheats.addSOD(1000)">+1K SOD</button>
-            <button class="cheat-btn" onclick="cheats.addUSDT(100)">+100 USDT</button>
-            <button class="cheat-btn" onclick="cheats.unlockAllPlans()">بازکردن پلن‌ها</button>
-            <button class="cheat-btn" onclick="cheats.resetProgress()">ریست</button>
+            <button class="cheat-btn" onclick="window.cheats.addSOD(1000)">+1K SOD</button>
+            <button class="cheat-btn" onclick="window.cheats.addUSDT(100)">+100 USDT</button>
+            <button class="cheat-btn" onclick="window.cheats.unlockAllPlans()">بازکردن پلن‌ها</button>
+            <button class="cheat-btn" onclick="window.cheats.resetProgress()">ریست</button>
         `;
         
         document.body.appendChild(cheatMenu);
@@ -1137,88 +2169,7 @@ if (window.location.hostname === 'localhost' || window.location.hostname === '12
     }, 3000);
 }
 
-// ==================== بخش ۱۴: تابع‌های آماری و گزارش‌گیری ====================
-function getGameStats() {
-    return {
-        version: window.gameVersion,
-        playTime: calculatePlayTime(),
-        efficiency: calculateMiningEfficiency(),
-        achievements: getAchievements(),
-        nextMilestone: getNextMilestone(),
-        estimatedDailyEarnings: calculateDailyEarnings()
-    };
-}
-
-function calculatePlayTime() {
-    const firstPlay = localStorage.getItem('sodmaxFirstPlay');
-    if (!firstPlay) {
-        localStorage.setItem('sodmaxFirstPlay', Date.now());
-        return '0 دقیقه';
-    }
-    
-    const minutes = Math.floor((Date.now() - parseInt(firstPlay)) / 60000);
-    
-    if (minutes < 60) {
-        return `${minutes} دقیقه`;
-    } else if (minutes < 1440) {
-        return `${Math.floor(minutes / 60)} ساعت`;
-    } else {
-        return `${Math.floor(minutes / 1440)} روز`;
-    }
-}
-
-function calculateMiningEfficiency() {
-    if (gameData.totalMined === 0) return 0;
-    
-    const firstPlay = parseInt(localStorage.getItem('sodmaxFirstPlay') || Date.now());
-    const minutes = Math.max(1, (Date.now() - firstPlay) / 60000);
-    
-    return Math.floor(gameData.totalMined / minutes);
-}
-
-function getAchievements() {
-    const achievements = [];
-    
-    if (gameData.totalMined >= 1000) achievements.push('استخراج‌کننده مبتدی');
-    if (gameData.totalMined >= 10000) achievements.push('استخراج‌کننده حرفه‌ای');
-    if (gameData.totalMined >= 100000) achievements.push('استخراج‌کننده افسانه‌ای');
-    if (gameData.userLevel >= 10) achievements.push('سطح بالا');
-    if (gameData.userLevel >= 50) achievements.push('کاربر VIP');
-    if (gameData.activePlan && gameData.activePlan.id === 4) achievements.push('صاحب پلن الماس');
-    
-    return achievements;
-}
-
-function getNextMilestone() {
-    if (gameData.totalMined < 1000) {
-        return { target: 1000, type: 'SOD', reward: 'دریافت 100 SOD اضافی' };
-    } else if (gameData.totalMined < 10000) {
-        return { target: 10000, type: 'SOD', reward: 'قدرت استخراج 2x به مدت 1 ساعت' };
-    } else if (gameData.totalMined < 100000) {
-        return { target: 100000, type: 'SOD', reward: 'دریافت 1 USDT رایگان' };
-    } else {
-        return { target: 1000000, type: 'SOD', reward: 'دسترسی به ویژگی‌های ویژه' };
-    }
-}
-
-function calculateDailyEarnings() {
-    const baseEarnings = gameData.miningPower * 3600 * 24; // فرض 24 ساعت کلیک
-    let total = baseEarnings;
-    
-    // اعمال پلن
-    if (gameData.activePlan) {
-        total *= gameData.activePlan.multiplier;
-    }
-    
-    // اعمال استخراج خودکار
-    if (gameData.autoMining && gameData.activePlan) {
-        total += gameData.activePlan.autoSpeed * 3600 * 24;
-    }
-    
-    return Math.floor(total);
-}
-
-// ==================== بخش ۱۵: تابع‌های مربوط به پروفایل کاربر ====================
+// ==================== بخش ۱۷: تابع‌های مربوط به پروفایل کاربر ====================
 async function updateUserProfile(username, avatarUrl) {
     if (!window.currentUser || window.isOfflineMode) {
         showNotification('⚠️ خطا', 'برای ویرایش پروفایل باید آنلاین باشید.');
@@ -1263,71 +2214,5 @@ async function changePassword(currentPassword, newPassword) {
         showNotification('❌ خطا', 'خطا در تغییر رمز عبور.');
     }
 }
-
-// ==================== بخش ۱۶: رویدادهای ویژه و فصلی ====================
-function checkForSpecialEvents() {
-    const now = new Date();
-    const events = [];
-    
-    // رویداد سال نو
-    if (now.getMonth() === 0 && now.getDate() === 1) {
-        events.push({
-            name: 'سال نو',
-            bonus: 2.0,
-            message: 'سال نو مبارک! استخراج ۲ برابر شده است!'
-        });
-    }
-    
-    // رویداد کریسمس
-    if (now.getMonth() === 11 && now.getDate() >= 20 && now.getDate() <= 26) {
-        events.push({
-            name: 'کریسمس',
-            bonus: 1.5,
-            message: 'کریسمس مبارک! ۵۰٪ پاداش اضافی دریافت کنید!'
-        });
-    }
-    
-    // رویداد تعطیلات آخر هفته
-    if (now.getDay() === 0 || now.getDay() === 6) {
-        events.push({
-            name: 'آخر هفته',
-            bonus: 1.2,
-            message: 'تعطیلات آخر هفته! ۲۰٪ پاداش اضافی'
-        });
-    }
-    
-    return events;
-}
-
-function applyEventBonuses(earnings) {
-    const events = checkForSpecialEvents();
-    
-    events.forEach(event => {
-        earnings *= event.bonus;
-        showNotification(`🎉 ${event.name}`, event.message);
-    });
-    
-    return earnings;
-}
-
-// ==================== بخش ۱۷: راه‌اندازی نهایی ====================
-// صبر کن تا همه چیز بارگذاری شود
-window.addEventListener('load', function() {
-    console.log('🚀 بازی SODMax کاملاً بارگذاری شد');
-    
-    // اعمال رویدادهای ویژه
-    const events = checkForSpecialEvents();
-    if (events.length > 0) {
-        events.forEach(event => {
-            showNotification(`🎊 ${event.name}`, event.message);
-        });
-    }
-    
-    // نمایش آمار اولیه
-    setTimeout(() => {
-        const stats = getGameStats();
-        console.log('📊 آمار بازی:', stats);
-    }, 5000);
-});
 
 // ==================== پایان فایل game-main.js ====================
