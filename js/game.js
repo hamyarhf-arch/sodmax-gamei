@@ -379,4 +379,103 @@ function updateFloatingWidget(recentMined = 0) {
     if (gameData.autoMining) {
         text.textContent = recentMined > 0 ? 
             `استخراج خودکار: +${formatNumber(recentMined)} SOD` : 
-            "استخراج
+            "استخراج خودکار فعال";
+        pulse.style.background = 'var(--success)';
+    } else if (gameData.boostActive) {
+        const timeLeft = Math.max(0, Math.ceil((gameData.boostEndTime - Date.now()) / 1000 / 60));
+        text.textContent = `افزایش قدرت فعال (${timeLeft}دقیقه باقی‌مانده)`;
+        pulse.style.background = 'var(--warning)';
+    } else {
+        text.textContent = "سیستم استخراج آماده";
+        pulse.style.background = 'var(--primary)';
+    }
+}
+
+// رندر تراکنش‌ها
+function renderTransactions() {
+    const list = document.getElementById('transactionsList');
+    list.innerHTML = '';
+    
+    gameData.transactions.slice(0, 6).forEach(tx => {
+        const row = document.createElement('div');
+        row.className = 'transaction-row';
+        
+        let icon = '⛏️';
+        let type = 'استخراج';
+        let amountClass = 'sod';
+        let amount = `+${formatNumber(tx.amount)} SOD`;
+        let typeClass = 'استخراج';
+        
+        if (tx.type === 'usdt') {
+            icon = tx.amount > 0 ? '💰' : '💳';
+            type = tx.amount > 0 ? 'پاداش USDT' : 'خرید پلن';
+            amountClass = 'usdt';
+            amount = `${tx.amount > 0 ? '+' : ''}${Math.abs(tx.amount).toFixed(2)} USDT`;
+            typeClass = tx.amount > 0 ? 'پاداش' : 'خرید';
+        } else if (tx.type === 'system') {
+            icon = '⚙️';
+            type = tx.description;
+            amountClass = '';
+            amount = '—';
+            typeClass = 'سیستم';
+        }
+        
+        row.innerHTML = `
+            <div class="transaction-type">
+                <div class="transaction-icon">${icon}</div>
+                <div class="transaction-details">
+                    <div>${tx.description}</div>
+                    <div>${tx.time}</div>
+                </div>
+            </div>
+            <div class="transaction-amount ${amountClass}">${amount}</div>
+            <div>${typeClass}</div>
+            <div>${tx.time}</div>
+        `;
+        list.appendChild(row);
+    });
+}
+
+// افزودن تراکنش
+function addTransaction(description, amount, type = 'sod') {
+    const now = new Date();
+    const time = now.toLocaleTimeString('fa-IR');
+    const date = now.toLocaleDateString('fa-IR');
+    
+    gameData.transactions.unshift({
+        description,
+        amount,
+        type,
+        time: `${date} ${time}`
+    });
+    
+    if (gameData.transactions.length > 50) {
+        gameData.transactions.pop();
+    }
+}
+
+// شبیه‌سازی داده زنده شبکه
+function updateNetworkStats() {
+    setInterval(() => {
+        const networkMined = document.getElementById('totalNetworkMined');
+        const base = 24500000;
+        const change = Math.floor(Math.random() * 100000) + 50000;
+        const newValue = base + change;
+        networkMined.textContent = formatNumber(newValue) + ' SOD';
+    }, 10000);
+}
+
+// شبیه‌سازی داده زنده
+function simulateLiveData() {
+    setInterval(() => {
+        // آپدیت درصدها
+        const changes = document.querySelectorAll('.stat-change');
+        if (changes.length >= 2) {
+            changes[0].innerHTML = `<i class="fas fa-arrow-up"></i> +${(Math.random() * 5 + 15).toFixed(1)}٪ از دیروز`;
+            changes[3].innerHTML = `<i class="fas fa-arrow-up"></i> +${(Math.random() * 0.8 + 0.4).toFixed(1)}٪ از ساعت قبل`;
+        }
+    }, 8000);
+}
+
+// راه‌اندازی
+window.addEventListener('DOMContentLoaded', init);
