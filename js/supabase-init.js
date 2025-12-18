@@ -57,6 +57,7 @@
         
         window.supabaseConfigured = true;
         window.currentUser = null;
+        window.isOfflineMode = true;
         console.log('⚠️ Supabase در حالت توسعه اجرا شد');
         return;
     }
@@ -108,6 +109,7 @@
                 window.SUPABASE_ANON_KEY = SUPABASE_ANON_KEY;
                 window.supabaseConfigured = true;
                 window.currentUser = null;
+                window.isOfflineMode = false;
                 
                 console.log('✅ Supabase با موفقیت راه‌اندازی شد');
                 console.log('🔗 URL:', SUPABASE_URL.substring(0, 30) + '...');
@@ -128,8 +130,10 @@
                     const { data, error } = await supabase.auth.getSession();
                     if (error) {
                         console.warn('⚠️ اتصال به Supabase دارای مشکل:', error.message);
+                        window.isOfflineMode = true;
                     } else {
                         console.log('🔗 اتصال به Supabase موفقیت‌آمیز بود');
+                        window.isOfflineMode = false;
                         if (data.session) {
                             console.log('👤 کاربر وارد شده:', data.session.user.email);
                             window.currentUser = data.session.user;
@@ -137,6 +141,7 @@
                     }
                 } catch (testError) {
                     console.warn('⚠️ تست اتصال با خطا مواجه شد:', testError.message);
+                    window.isOfflineMode = true;
                 }
             }, 1000);
         }
@@ -274,6 +279,13 @@
         return window.supabase;
     };
     
+    /**
+     * بررسی حالت آفلاین
+     */
+    window.isOfflineMode = function() {
+        return window.isOfflineMode;
+    };
+    
     // ==================== رویدادهای Supabase ====================
     
     // گوش دادن به تغییرات وضعیت احراز هویت
@@ -283,6 +295,7 @@
             
             if (event === 'SIGNED_IN' && session) {
                 window.currentUser = session.user;
+                window.isOfflineMode = false;
                 console.log('👤 کاربر وارد شد:', session.user.email);
                 
                 // نمایش نوتیفیکیشن
@@ -299,6 +312,9 @@
                     window.showNotification('👋 خدانگهدار', 'با موفقیت خارج شدید');
                 }
             }
+            else if (event === 'USER_UPDATED') {
+                console.log('🔄 اطلاعات کاربر آپدیت شد');
+            }
         });
     }
     
@@ -309,5 +325,6 @@
     console.log('  - window.getCurrentUser() - دریافت کاربر');
     console.log('  - window.isUserLoggedIn() - بررسی ورود');
     console.log('  - window.getSupabaseClient() - دریافت کلاینت');
+    console.log('  - window.isOfflineMode() - بررسی حالت آفلاین');
     
 })();
