@@ -1,4 +1,133 @@
-// ==================== بخش ۱: توابع ذخیره/بارگذاری پیشرفته ====================
+// ==================== بخش ۱: داده‌های بازی ====================
+const gameData = {
+    sodBalance: 0,
+    usdtBalance: 0,
+    todayEarnings: 0,
+    totalMined: 0,
+    miningPower: 10,
+    userLevel: 1,
+    activePlan: null,
+    usdtProgress: 0,
+    autoMining: false,
+    transactions: [],
+    boostActive: false,
+    boostEndTime: 0,
+    lastClaimTime: null
+};
+
+// پلن‌ها
+const plans = [
+    {
+        id: 1,
+        name: "استارتر",
+        price: 0,
+        multiplier: 1,
+        autoSpeed: 0,
+        usdtBonus: 0,
+        features: [
+            "قدرت استخراج ۱x",
+            "بدون استخراج خودکار",
+            "پاداش استاندارد USDT",
+            "پشتیبانی معمولی",
+            "حداکثر ۱۰۰ کلیک/ساعت"
+        ],
+        popular: false
+    },
+    {
+        id: 2,
+        name: "پرو",
+        price: 49,
+        multiplier: 3,
+        autoSpeed: 50,
+        usdtBonus: 25,
+        features: [
+            "قدرت استخراج ۳x",
+            "استخراج خودکار ۵۰ SOD/ث",
+            "پاداش +۲۵٪ USDT",
+            "پشتیبانی ویژه",
+            "حداکثر ۵۰۰ کلیک/ساعت",
+            "هدیه هفتگی SOD"
+        ],
+        popular: true
+    },
+    {
+        id: 3,
+        name: "پلاتینیوم",
+        price: 199,
+        multiplier: 8,
+        autoSpeed: 200,
+        usdtBonus: 75,
+        features: [
+            "قدرت استخراج ۸x",
+            "استخراج خودکار ۲۰۰ SOD/ث",
+            "پاداش +۷۵٪ USDT",
+            "پشتیبانی VIP",
+            "کلیک نامحدود",
+            "هدیه روزانه SOD",
+            "دسترسی زودهنگام به ویژگی‌ها"
+        ],
+        popular: false
+    },
+    {
+        id: 4,
+        name: "الماس",
+        price: 499,
+        multiplier: 15,
+        autoSpeed: 500,
+        usdtBonus: 150,
+        features: [
+            "قدرت استخراج ۱۵x",
+            "استخراج خودکار ۵۰۰ SOD/ث",
+            "پاداش +۱۵۰٪ USDT",
+            "مدیر اختصاصی",
+            "دریافت روزانه USDT",
+            "مشارکت در سود شبکه",
+            "دسترسی به API پیشرفته"
+        ],
+        popular: false
+    }
+];
+
+// ==================== بخش ۲: توابع عمومی ====================
+function formatNumber(num) {
+    if (num >= 1000000000) {
+        return (num / 1000000000).toFixed(2) + 'B';
+    }
+    if (num >= 1000000) {
+        return (num / 1000000).toFixed(1) + 'M';
+    }
+    if (num >= 1000) {
+        return (num / 1000).toFixed(1) + 'K';
+    }
+    return Math.floor(num).toLocaleString('fa-IR');
+}
+
+function showNotification(title, message) {
+    const notification = document.getElementById('notification');
+    if (!notification) return;
+    
+    document.getElementById('notificationTitle').textContent = title;
+    document.getElementById('notificationMessage').textContent = message;
+    
+    notification.classList.add('show');
+    
+    setTimeout(() => {
+        notification.classList.remove('show');
+    }, 4000);
+}
+
+function hideNotification() {
+    const notification = document.getElementById('notification');
+    if (notification) notification.classList.remove('show');
+}
+
+function showConfirmationModal(title, message, onConfirm) {
+    if (window.confirm(`${title}\n\n${message}`)) {
+        onConfirm();
+    }
+}
+
+// ==================== بخش ۳: توابع ذخیره/بارگذاری پیشرفته ====================
 
 /**
  * ذخیره ترکیبی - هم محلی هم دیتابیس
@@ -24,9 +153,6 @@ async function saveGame() {
             enableOfflineMode();
         }
     }
-    
-    // ۳. ذخیره در IndexedDB برای پشتیبان اضافه (اختیاری)
-    saveToIndexedDB();
 }
 
 /**
@@ -237,89 +363,7 @@ async function syncLocalDataWithDatabase() {
     }
 }
 
-/**
- * ذخیره در IndexedDB برای پشتیبان اضافه
- */
-function saveToIndexedDB() {
-    if (!window.indexedDB) return;
-    
-    try {
-        const request = indexedDB.open('sodmax_backup', 1);
-        
-        request.onupgradeneeded = function(event) {
-            const db = event.target.result;
-            if (!db.objectStoreNames.contains('game_data')) {
-                db.createObjectStore('game_data', { keyPath: 'id' });
-            }
-        };
-        
-        request.onsuccess = function(event) {
-            const db = event.target.result;
-            const transaction = db.transaction(['game_data'], 'readwrite');
-            const store = transaction.objectStore('game_data');
-            
-            const backupData = {
-                id: window.currentUser ? window.currentUser.id : 'guest',
-                data: gameData,
-                timestamp: Date.now(),
-                version: '3.0'
-            };
-            
-            store.put(backupData);
-        };
-        
-    } catch (error) {
-        console.warn('ذخیره در IndexedDB با خطا مواجه شد:', error);
-    }
-}
-
-// ==================== بخش ۲: تغییر در init اصلی ====================
-
-async function init() {
-    console.log('🚀 در حال راه‌اندازی SODmAX Pro...');
-    
-    // ۱. ابتدا Supabase رو چک کن
-    if (!window.supabase || !window.supabaseConfigured) {
-        console.warn('⚠️ Supabase لود نشده است');
-        showNotification('📡 حالت آفلاین', 'شما در حال حاضر در حالت آفلاین بازی می‌کنید.');
-        window.isOfflineMode = true;
-    }
-    
-    // ۲. احراز هویت
-    const isAuthenticated = await handleAuth();
-    
-    // ۳. بارگذاری بازی (چه کاربر وارد شده باشه یا نه)
-    await loadGame();
-    
-    // ۴. اگر کاربر وارد شده، همگام‌سازی کن
-    if (isAuthenticated && !window.isOfflineMode) {
-        setTimeout(() => {
-            syncLocalDataWithDatabase();
-        }, 3000);
-    }
-    
-    // ۵. بقیه تنظیمات
-    renderPlans();
-    updateUI();
-    setupEventListeners();
-    startAutoMining();
-    simulateLiveData();
-    updateNetworkStats();
-    
-    // ۶. نمایش پیام مناسب
-    if (isAuthenticated) {
-        if (window.isOfflineMode) {
-            showNotification("👋 خوش آمدید", "شما در حالت آفلاین وارد شدید. داده‌ها فقط محلی ذخیره می‌شوند.");
-        } else {
-            showNotification("🌟 سیستم استخراج آماده!", "با کلیک روی هسته مرکزی شروع به استخراج کنید.");
-        }
-    } else {
-        showNotification("👋 به SODmAX Pro خوش آمدید!", "برای ذخیره دائمی داده‌ها، وارد شوید یا ثبت‌نام کنید.");
-    }
-}
-
-// ==================== بخش ۳: تغییر در تابع handleAuth ====================
-
+// ==================== بخش ۴: توابع احراز هویت ====================
 async function handleAuth() {
     try {
         // اول از localStorage چک کن اگر کاربری ذخیره شده
@@ -369,65 +413,96 @@ async function handleAuth() {
     }
 }
 
-// ==================== بخش ۴: تغییر در تابع updateFloatingWidget ====================
-
-function updateFloatingWidget(recentMined = 0) {
-    const widget = document.getElementById('floatingWidget');
-    if (!widget) return;
-    
-    const pulse = widget.querySelector('.pulse');
-    const text = document.getElementById('widgetText');
-    
-    if (!pulse || !text) return;
-    
-    if (window.currentUser) {
-        if (window.isOfflineMode) {
-            text.textContent = "📡 حالت آفلاین - فقط ذخیره محلی";
-            pulse.style.background = 'var(--warning)';
-        } else if (gameData.autoMining) {
-            text.textContent = recentMined > 0 ? 
-                `استخراج خودکار: +${formatNumber(recentMined)} SOD` : 
-                "استخراج خودکار فعال";
-            pulse.style.background = 'var(--success)';
-        } else if (gameData.boostActive) {
-            const timeLeft = Math.max(0, Math.ceil((gameData.boostEndTime - Date.now()) / 1000 / 60));
-            text.textContent = `افزایش قدرت فعال (${timeLeft}دقیقه باقی‌مانده)`;
-            pulse.style.background = 'var(--warning)';
-        } else {
-            text.textContent = "سیستم استخراج آماده";
-            pulse.style.background = 'var(--primary)';
+async function signUp(email, password, username) {
+    try {
+        // اگر Supabase وصل نیست، حالت آفلاین
+        if (!window.supabase || !window.supabaseConfigured) {
+            console.log('🔌 ثبت‌نام در حالت آفلاین');
+            
+            // ذخیره کاربر در localStorage
+            const userData = {
+                email: email,
+                username: username,
+                lastLogin: new Date().toISOString()
+            };
+            localStorage.setItem('sodmaxUser', JSON.stringify(userData));
+            
+            window.currentUser = { 
+                id: 'local-' + email, 
+                email: email 
+            };
+            
+            enableOfflineMode();
+            showNotification('🎉 ثبت‌نام موفق (آفلاین)', 'حساب کاربری شما ایجاد شد.');
+            closeAuthModal();
+            updateNavForLoggedInUser();
+            return true;
         }
-    } else {
-        text.textContent = "برای ذخیره دائمی، وارد شوید";
-        pulse.style.background = 'var(--text-secondary)';
+        
+        const { data, error } = await supabase.auth.signUp({
+            email,
+            password,
+            options: {
+                data: {
+                    username: username
+                }
+            }
+        });
+
+        if (error) throw error;
+
+        if (data.user) {
+            // ایجاد رکورد کاربر در جدول users
+            const { error: dbError } = await supabase
+                .from('users')
+                .insert([
+                    {
+                        id: data.user.id,
+                        email: email,
+                        username: username,
+                        created_at: new Date().toISOString()
+                    }
+                ]);
+
+            if (dbError) throw dbError;
+
+            // ایجاد رکورد داده بازی
+            const { error: gameError } = await supabase
+                .from('user_game_data')
+                .insert([
+                    {
+                        user_id: data.user.id,
+                        sod_balance: 0,
+                        usdt_balance: 0,
+                        mining_power: 10,
+                        user_level: 1,
+                        updated_at: new Date().toISOString()
+                    }
+                ]);
+
+            if (gameError) throw gameError;
+
+            window.currentUser = data.user;
+            
+            // ذخیره در localStorage برای حالت آفلاین
+            localStorage.setItem('sodmaxUser', JSON.stringify({
+                email: data.user.email,
+                id: data.user.id,
+                username: username,
+                lastLogin: new Date().toISOString()
+            }));
+            
+            showNotification('🎉 ثبت‌نام موفق', 'حساب کاربری شما با موفقیت ایجاد شد!');
+            closeAuthModal();
+            updateNavForLoggedInUser();
+            return true;
+        }
+    } catch (error) {
+        console.error('خطا در ثبت‌نام:', error);
+        showNotification('❌ خطا در ثبت‌نام', error.message);
+        return false;
     }
 }
-
-// ==================== بخش ۵: مدیریت حالت آنلاین/آفلاین ====================
-
-// تشخیص تغییر وضعیت اتصال اینترنت
-window.addEventListener('online', () => {
-    console.log('🌐 اتصال اینترنت برقرار شد');
-    if (window.currentUser && window.supabaseConfigured) {
-        showNotification('🌐 آنلاین شدید', 'اتصال به دیتابیس برقرار شد.');
-        window.isOfflineMode = false;
-        
-        // سعی کن دوباره همگام‌سازی کنی
-        setTimeout(() => {
-            syncLocalDataWithDatabase();
-        }, 2000);
-    }
-});
-
-window.addEventListener('offline', () => {
-    console.log('📡 اتصال اینترنت قطع شد');
-    if (window.currentUser) {
-        showNotification('📡 حالت آفلاین', 'اتصال اینترنت قطع شد. داده‌ها فقط محلی ذخیره می‌شوند.');
-        enableOfflineMode();
-    }
-});
-
-// ==================== بخش ۶: تغییر در signIn و signUp ====================
 
 async function signIn(email, password) {
     try {
@@ -491,210 +566,283 @@ async function signIn(email, password) {
         return false;
     }
 }
-// ==================== بخش ۷: پنل مدیریت وضعیت ====================
 
-/**
- * نمایش پنل وضعیت سیستم
- */
-function showStatusPanel() {
-    const panelHTML = `
-        <div class="modal-overlay" id="statusModal">
+async function signOut() {
+    try {
+        // اگر Supabase وصل هست
+        if (window.supabase && window.supabaseConfigured) {
+            const { error } = await supabase.auth.signOut();
+            if (error) throw error;
+        }
+        
+        window.currentUser = null;
+        localStorage.removeItem('sodmaxUser');
+        gameData.sodBalance = 0;
+        gameData.usdtBalance = 0;
+        gameData.todayEarnings = 0;
+        updateUI();
+        
+        showNotification('👋 خدانگهدار', 'با موفقیت خارج شدید');
+        updateNavForLoggedOutUser();
+        
+        setTimeout(() => {
+            showLoginModal();
+        }, 1000);
+    } catch (error) {
+        console.error('خطا در خروج:', error);
+    }
+}
+
+async function loadUserData(userId) {
+    try {
+        // دریافت داده‌های بازی کاربر
+        const { data: gameDataDB, error: gameError } = await supabase
+            .from('user_game_data')
+            .select('*')
+            .eq('user_id', userId)
+            .single();
+
+        if (!gameError && gameDataDB) {
+            gameData.sodBalance = gameDataDB.sod_balance || 0;
+            gameData.usdtBalance = parseFloat(gameDataDB.usdt_balance) || 0;
+            gameData.miningPower = gameDataDB.mining_power || 10;
+            gameData.userLevel = gameDataDB.user_level || 1;
+            gameData.totalMined = gameDataDB.total_mined || 0;
+            gameData.todayEarnings = gameDataDB.today_earnings || 0;
+            gameData.usdtProgress = gameDataDB.usdt_progress || 0;
+            gameData.boostActive = gameDataDB.boost_active || false;
+            gameData.boostEndTime = gameDataDB.boost_end_time ? new Date(gameDataDB.boost_end_time).getTime() : 0;
+        }
+
+        // دریافت پلن فعال کاربر
+        const { data: activePlan, error: planError } = await supabase
+            .from('user_plans')
+            .select('*')
+            .eq('user_id', userId)
+            .eq('is_active', true)
+            .single();
+
+        if (activePlan && !planError) {
+            gameData.activePlan = {
+                id: activePlan.plan_id,
+                name: activePlan.plan_name,
+                price: activePlan.price,
+                multiplier: activePlan.multiplier,
+                autoSpeed: activePlan.auto_speed,
+                usdtBonus: activePlan.usdt_bonus
+            };
+        }
+
+        // دریافت آخرین تراکنش‌ها
+        await loadUserTransactions(userId);
+
+        updateUI();
+
+    } catch (error) {
+        console.error('خطا در بارگذاری داده‌های کاربر:', error);
+    }
+}
+
+async function saveGameToDatabase() {
+    if (!window.currentUser) return;
+
+    try {
+        const { error } = await supabase
+            .from('user_game_data')
+            .upsert([
+                {
+                    user_id: window.currentUser.id,
+                    sod_balance: gameData.sodBalance,
+                    usdt_balance: gameData.usdtBalance,
+                    mining_power: gameData.miningPower,
+                    user_level: gameData.userLevel,
+                    total_mined: gameData.totalMined,
+                    today_earnings: gameData.todayEarnings,
+                    usdt_progress: gameData.usdtProgress,
+                    active_plan_id: gameData.activePlan?.id || null,
+                    boost_active: gameData.boostActive,
+                    boost_end_time: gameData.boostActive ? new Date(gameData.boostEndTime).toISOString() : null,
+                    last_claim_time: gameData.lastClaimTime,
+                    updated_at: new Date().toISOString()
+                }
+            ]);
+
+        if (error) throw error;
+    } catch (error) {
+        console.error('خطا در ذخیره داده‌های بازی:', error);
+        throw error;
+    }
+}
+
+async function saveTransactionToDB(description, amount, type) {
+    if (!window.currentUser) return;
+
+    try {
+        const { error } = await supabase
+            .from('transactions')
+            .insert([
+                {
+                    user_id: window.currentUser.id,
+                    description: description,
+                    amount: Math.abs(amount),
+                    type: type,
+                    status: 'completed',
+                    created_at: new Date().toISOString()
+                }
+            ]);
+
+        if (error) throw error;
+    } catch (error) {
+        console.error('خطا در ذخیره تراکنش:', error);
+    }
+}
+
+async function loadUserTransactions(userId) {
+    try {
+        const { data: transactions, error } = await supabase
+            .from('transactions')
+            .select('*')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false })
+            .limit(10);
+
+        if (!error && transactions) {
+            gameData.transactions = transactions.map(tx => ({
+                description: tx.description,
+                amount: tx.amount,
+                type: tx.type,
+                time: new Date(tx.created_at).toLocaleString('fa-IR')
+            }));
+        }
+    } catch (error) {
+        console.error('خطا در بارگذاری تراکنش‌ها:', error);
+    }
+}
+
+async function savePlanPurchase(plan) {
+    if (!window.currentUser) return;
+
+    try {
+        const expiresAt = new Date();
+        expiresAt.setMonth(expiresAt.getMonth() + 1); // 1 ماه اعتبار
+
+        const { error } = await supabase
+            .from('user_plans')
+            .insert([
+                {
+                    user_id: window.currentUser.id,
+                    plan_id: plan.id,
+                    plan_name: plan.name,
+                    price: plan.price,
+                    multiplier: plan.multiplier,
+                    auto_speed: plan.autoSpeed,
+                    usdt_bonus: plan.usdtBonus,
+                    purchased_at: new Date().toISOString(),
+                    expires_at: expiresAt.toISOString(),
+                    is_active: true
+                }
+            ]);
+
+        if (error) throw error;
+
+        // غیرفعال کردن پلن‌های قبلی
+        await supabase
+            .from('user_plans')
+            .update({ is_active: false })
+            .eq('user_id', window.currentUser.id)
+            .neq('plan_id', plan.id);
+
+    } catch (error) {
+        console.error('خطا در ذخیره خرید پلن:', error);
+    }
+}
+
+// ==================== بخش ۵: مودال ورود/ثبت‌نام ====================
+function showLoginModal() {
+    // اگر مودال قبلاً نمایش داده شده، نمایش نده
+    if (document.getElementById('authModal')) return;
+    
+    const modalHTML = `
+        <div class="modal-overlay" id="authModal">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h3>📊 وضعیت سیستم</h3>
-                    <button class="modal-close" onclick="closeStatusModal()">×</button>
+                    <h3>ورود / ثبت‌نام</h3>
+                    <button class="modal-close" onclick="closeAuthModal()">×</button>
                 </div>
                 
                 <div class="modal-body">
-                    <div class="status-grid">
-                        <div class="status-item ${window.supabaseConfigured ? 'online' : 'offline'}">
-                            <div class="status-icon">
-                                <i class="fas fa-database"></i>
-                            </div>
-                            <div class="status-info">
-                                <div class="status-title">دیتابیس</div>
-                                <div class="status-value">${window.supabaseConfigured ? 'متصل ✅' : 'قطع ❌'}</div>
-                            </div>
-                        </div>
-                        
-                        <div class="status-item ${window.currentUser ? 'online' : 'offline'}">
-                            <div class="status-icon">
-                                <i class="fas fa-user"></i>
-                            </div>
-                            <div class="status-info">
-                                <div class="status-title">کاربر</div>
-                                <div class="status-value">${window.currentUser ? 'وارد شده ✅' : 'مهمان ❌'}</div>
-                            </div>
-                        </div>
-                        
-                        <div class="status-item ${window.isOfflineMode ? 'offline' : 'online'}">
-                            <div class="status-icon">
-                                <i class="fas fa-wifi"></i>
-                            </div>
-                            <div class="status-info">
-                                <div class="status-title">وضعیت</div>
-                                <div class="status-value">${window.isOfflineMode ? 'آفلاین 📡' : 'آنلاین 🌐'}</div>
-                            </div>
-                        </div>
-                        
-                        <div class="status-item">
-                            <div class="status-icon">
-                                <i class="fas fa-save"></i>
-                            </div>
-                            <div class="status-info">
-                                <div class="status-title">ذخیره محلی</div>
-                                <div class="status-value">فعال ✅</div>
-                            </div>
-                        </div>
+                    <div class="auth-tabs">
+                        <button class="auth-tab active" onclick="switchAuthTab('login')">ورود</button>
+                        <button class="auth-tab" onclick="switchAuthTab('signup')">ثبت‌نام</button>
                     </div>
                     
-                    <div class="data-info">
-                        <h4>📁 اطلاعات ذخیره‌شده:</h4>
-                        <div class="data-stats">
-                            <div class="data-stat">
-                                <span>موجودی SOD:</span>
-                                <strong>${formatNumber(gameData.sodBalance)}</strong>
-                            </div>
-                            <div class="data-stat">
-                                <span>موجودی USDT:</span>
-                                <strong>${gameData.usdtBalance.toFixed(2)}</strong>
-                            </div>
-                            <div class="data-stat">
-                                <span>سطح کاربر:</span>
-                                <strong>${gameData.userLevel}</strong>
-                            </div>
-                            <div class="data-stat">
-                                <span>تراکنش‌ها:</span>
-                                <strong>${gameData.transactions.length}</strong>
-                            </div>
+                    <form id="loginForm" class="auth-form active">
+                        <div class="form-group">
+                            <label>ایمیل</label>
+                            <input type="email" id="loginEmail" required placeholder="example@gmail.com">
                         </div>
+                        
+                        <div class="form-group">
+                            <label>رمز عبور</label>
+                            <input type="password" id="loginPassword" required placeholder="••••••••">
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary btn-block">
+                            <i class="fas fa-sign-in-alt"></i>
+                            ورود به حساب
+                        </button>
+                    </form>
+                    
+                    <form id="signupForm" class="auth-form">
+                        <div class="form-group">
+                            <label>نام کاربری</label>
+                            <input type="text" id="signupUsername" required placeholder="username">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>ایمیل</label>
+                            <input type="email" id="signupEmail" required placeholder="example@gmail.com">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>رمز عبور</label>
+                            <input type="password" id="signupPassword" required placeholder="••••••••">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>تکرار رمز عبور</label>
+                            <input type="password" id="signupPasswordConfirm" required placeholder="••••••••">
+                        </div>
+                        
+                        <button type="submit" class="btn btn-success btn-block">
+                            <i class="fas fa-user-plus"></i>
+                            ایجاد حساب کاربری
+                        </button>
+                    </form>
+                    
+                    <div class="auth-divider">
+                        <span>یا</span>
                     </div>
                     
-                    <div class="status-actions">
-                        <button class="btn btn-outline btn-block" onclick="exportLocalData()">
-                            <i class="fas fa-download"></i>
-                            خروجی از داده‌های محلی
-                        </button>
-                        
-                        <button class="btn btn-outline btn-block" onclick="clearLocalData()">
-                            <i class="fas fa-trash"></i>
-                            پاک کردن داده‌های محلی
-                        </button>
-                        
-                        ${window.currentUser ? `
-                            <button class="btn btn-primary btn-block" onclick="forceSyncWithDatabase()">
-                                <i class="fas fa-sync"></i>
-                                همگام‌سازی با دیتابیس
-                            </button>
-                        ` : ''}
-                    </div>
+                    <button class="btn btn-outline btn-block" onclick="connectWallet()">
+                        <i class="fas fa-wallet"></i>
+                        ورود با کیف پول
+                    </button>
                 </div>
                 
                 <div class="modal-footer">
-                    <p class="text-center" style="font-size: 11px;">
-                        آخرین ذخیره: ${new Date(parseInt(localStorage.getItem('sodmaxLastSave') || Date.now())).toLocaleString('fa-IR')}
+                    <p class="text-center">
+                        با ورود یا ثبت‌نام، <a href="#">قوانین و شرایط</a> را می‌پذیرید.
                     </p>
                 </div>
             </div>
         </div>
     `;
-    
-    document.body.insertAdjacentHTML('beforeend', panelHTML);
+
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
 }
 
-function closeStatusModal() {
-    const modal = document.getElementById('statusModal');
+function closeAuthModal() {
+    const modal = document.getElementById('authModal');
     if (modal) modal.remove();
-}
-
-/**
- * خروجی گرفتن از داده‌های محلی
- */
-function exportLocalData() {
-    const data = {
-        gameData: gameData,
-        user: window.currentUser,
-        timestamp: new Date().toISOString(),
-        version: localStorage.getItem('sodmaxVersion') || '3.0'
-    };
-    
-    const dataStr = JSON.stringify(data, null, 2);
-    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-    
-    const exportFileDefaultName = `sodmax-backup-${new Date().toISOString().split('T')[0]}.json`;
-    
-    const linkElement = document.createElement('a');
-    linkElement.setAttribute('href', dataUri);
-    linkElement.setAttribute('download', exportFileDefaultName);
-    linkElement.click();
-    
-    showNotification('💾 خروجی گرفته شد', 'داده‌های شما دانلود شدند.');
-}
-
-/**
- * پاک کردن داده‌های محلی
- */
-function clearLocalData() {
-    if (confirm('⚠️ آیا مطمئن هستید که می‌خواهید تمام داده‌های محلی را پاک کنید؟\nاین عمل برگشت‌ناپذیر است!')) {
-        localStorage.removeItem('sodmaxProData');
-        localStorage.removeItem('sodmaxUser');
-        localStorage.removeItem('sodmaxLastSave');
-        localStorage.removeItem('sodmaxLastPlayed');
-        
-        // ریست کردن بازی
-        Object.keys(gameData).forEach(key => {
-            if (key !== 'transactions') {
-                gameData[key] = 0;
-            }
-        });
-        gameData.miningPower = 10;
-        gameData.userLevel = 1;
-        gameData.transactions = [];
-        
-        updateUI();
-        showNotification('🗑️ داده‌ها پاک شدند', 'تمام داده‌های محلی پاک شدند.');
-        closeStatusModal();
-    }
-}
-
-/**
- * همگام‌سازی اجباری با دیتابیس
- */
-async function forceSyncWithDatabase() {
-    if (!window.currentUser || !window.supabaseConfigured) {
-        showNotification('❌ خطا', 'برای همگام‌سازی باید وارد شده و به دیتابیس متصل باشید.');
-        return;
-    }
-    
-    try {
-        showNotification('🔄 در حال همگام‌سازی...', 'لطفاً منتظر بمانید.');
-        
-        // ذخیره فعلی در دیتابیس
-        await saveGameToDatabase();
-        
-        // بارگذاری مجدد از دیتابیس
-        await loadFromDatabase();
-        
-        updateUI();
-        showNotification('✅ همگام‌سازی موفق', 'داده‌ها با موفقیت همگام‌سازی شدند.');
-        closeStatusModal();
-        
-    } catch (error) {
-        console.error('خطا در همگام‌سازی:', error);
-        showNotification('❌ خطا در همگام‌سازی', 'لطفاً دوباره تلاش کنید.');
-    }
-}
-
-// اضافه کردن دکمه وضعیت در فوتر
-function addStatusButtonToFooter() {
-    const footer = document.querySelector('.footer');
-    if (!footer) return;
-    
-    const statusBtn = document.createElement('button');
-    statusBtn.className = 'btn btn-outline';
-    statusBtn.style.cssText = 'margin: 10px auto; display: block; max-width: 200px;';
-    statusBtn.innerHTML = '<i class="fas fa-info-circle"></i> وضعیت سیستم';
-    statusBtn.onclick = showStatusPanel;
-    
-    footer.querySelector('.copyright').insertAdjacentElement('beforebegin', statusBtn);
 }
