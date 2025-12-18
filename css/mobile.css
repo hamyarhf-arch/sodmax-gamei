@@ -1,1 +1,143 @@
+/* استایل برای تبلت */
+@media (min-width: 768px) {
+    html {
+        font-size: 16px;
+    }
+    
+    .container {
+        padding: 0 24px;
+        max-width: 768px;
+    }
+    
+    .navbar {
+        flex-direction: row;
+        justify-content: space-between;
+        padding: 20px 0;
+    }
+    
+    .wallet-section {
+        flex-direction: row;
+        width: auto;
+    }
+    
+    .wallet-row {
+        flex-direction: row;
+    }
+    
+    .wallet-card {
+        min-width: 160px;
+    }
+    
+    .section-title {
+        font-size: 32px;
+    }
+    
+    .miner-core {
+        width: 280px;
+        height: 280px;
+    }
+    
+    .miner-controls {
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+    
+    .btn {
+        width: auto;
+        flex: 1;
+    }
+    
+    .stats-view {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 16px;
+    }
+    
+    .plans-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 20px;
+    }
+    
+    .reward-card {
+        flex-direction: row;
+    }
+    
+    .footer-content {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 40px;
+    }
+    
+    .floating-widget {
+        right: 24px;
+        left: auto;
+        width: auto;
+        max-width: 300px;
+    }
+    
+    .notification {
+        right: 24px;
+        left: auto;
+        max-width: 400px;
+    }
+}
 
+/* استایل برای دسکتاپ کوچک */
+@media (min-width: 992px) {
+    .container {
+        max-width: 1200px;
+        padding: 0 32px;
+    }
+    
+    .navbar {
+        margin-bottom: 40px;
+    }
+    
+    .miner-container {
+        display: grid;
+        grid-template-columns: 1.2fr 0.8fr;
+        gap: 40px;
+    }
+    
+    .plans-grid {
+        grid-template-columns: repeat(4, 1fr);
+    }
+    
+    .footer-content {
+        grid-template-columns: 1.5fr repeat(3, 1fr);
+        gap: 60px;
+    }
+}
+
+/* استایل برای دسکتاپ بزرگ */
+@media (min-width: 1200px) {
+    .container {
+        max-width: 1600px;
+    }
+}
+
+/* استایل برای لنداسکیپ موبایل */
+@media (max-height: 500px) and (orientation: landscape) {
+    .miner-display {
+        height: 200px;
+    }
+    
+    .miner-core {
+        width: 180px;
+        height: 180px;
+    }
+    
+    .core-icon {
+        font-size: 36px;
+        margin-bottom: 12px;
+    }
+    
+    .click-reward {
+        font-size: 20px;
+    }
+    
+    .section-title {
+        font-size: 24px;
+    }
+}
