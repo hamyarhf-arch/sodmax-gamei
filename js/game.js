@@ -634,9 +634,6 @@ function simulateLiveData() {
     }, 8000);
 }
 
-// راه‌اندازی
-window.addEventListener('DOMContentLoaded', init);
-
 // اضافه کردن انیمیشن‌های CSS
 if (!document.getElementById('mobileAnimations')) {
     const style = document.createElement('style');
@@ -665,6 +662,9 @@ if (!document.getElementById('mobileAnimations')) {
     `;
     document.head.appendChild(style);
 }
+
+// راه‌اندازی
+window.addEventListener('DOMContentLoaded', init);
 
 // نمایش نسخه
 console.log('📱 SODmAX Pro v2.0 Mobile | بهینه‌شده برای موبایل');
