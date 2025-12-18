@@ -1,0 +1,261 @@
+/* استایل‌های کیف پول */
+.wallet-balances {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.balance-card {
+    background: linear-gradient(145deg, var(--card) 0%, rgba(18, 24, 40, 0.9) 100%);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    transition: all 0.3s ease;
+}
+
+.balance-card:active {
+    transform: translateY(-2px);
+}
+
+.balance-card.usdt {
+    border-color: rgba(38, 161, 123, 0.3);
+    background: linear-gradient(145deg, rgba(38, 161, 123, 0.15) 0%, rgba(0, 212, 170, 0.15) 100%);
+}
+
+.balance-card.sod {
+    border-color: rgba(247, 147, 26, 0.3);
+    background: linear-gradient(145deg, rgba(247, 147, 26, 0.15) 0%, rgba(255, 209, 102, 0.15) 100%);
+}
+
+.balance-icon {
+    width: 50px;
+    height: 50px;
+    background: var(--glass);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    color: white;
+}
+
+.balance-card.usdt .balance-icon {
+    background: var(--usdt);
+}
+
+.balance-card.sod .balance-icon {
+    background: var(--btc);
+}
+
+.balance-info {
+    flex: 1;
+}
+
+.balance-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+}
+
+.balance-amount {
+    font-size: 20px;
+    font-weight: 800;
+    color: white;
+}
+
+.wallet-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 24px;
+}
+
+.wallet-transactions h4 {
+    font-size: 16px;
+    font-weight: 700;
+    color: white;
+    margin-bottom: 16px;
+}
+
+.transaction-item {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 12px;
+    background: var(--card);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius);
+    margin-bottom: 8px;
+    transition: all 0.3s ease;
+}
+
+.transaction-item:active {
+    transform: translateX(-2px);
+    border-color: var(--primary);
+}
+
+.tx-icon {
+    width: 40px;
+    height: 40px;
+    background: var(--glass);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+}
+
+.transaction-item.deposit .tx-icon {
+    background: rgba(0, 212, 170, 0.2);
+    color: var(--secondary);
+}
+
+.transaction-item.withdraw .tx-icon {
+    background: rgba(255, 107, 53, 0.2);
+    color: var(--accent);
+}
+
+.tx-details {
+    flex: 1;
+}
+
+.tx-type {
+    font-size: 14px;
+    font-weight: 600;
+    color: white;
+    margin-bottom: 4px;
+}
+
+.tx-time {
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+.tx-amount {
+    font-weight: 700;
+    font-size: 16px;
+}
+
+.tx-amount.deposit {
+    color: var(--success);
+}
+
+.tx-amount.withdraw {
+    color: var(--accent);
+}
+
+.empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+/* استایل‌های روش واریز */
+.deposit-methods {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-bottom: 24px;
+}
+
+.method-card {
+    background: var(--card);
+    border: 2px solid var(--glass-border);
+    border-radius: var(--radius);
+    padding: 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.method-card:active {
+    transform: scale(0.98);
+    border-color: var(--primary);
+}
+
+.method-card i {
+    font-size: 32px;
+    margin-bottom: 12px;
+    display: block;
+}
+
+.method-card.usdt i {
+    color: var(--usdt);
+}
+
+.method-card.sod i {
+    color: var(--btc);
+}
+
+.method-card span {
+    display: block;
+    font-weight: 600;
+    color: white;
+    margin-bottom: 4px;
+}
+
+.method-card small {
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+.wallet-address {
+    margin: 24px 0;
+}
+
+.address-box {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--dark);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    margin: 8px 0;
+}
+
+.address-box code {
+    flex: 1;
+    font-family: monospace;
+    font-size: 12px;
+    color: white;
+    word-break: break-all;
+}
+
+.address-box button {
+    background: none;
+    border: none;
+    color: var(--primary);
+    font-size: 18px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 6px;
+    transition: all 0.3s ease;
+}
+
+.address-box button:active {
+    background: rgba(0, 102, 255, 0.1);
+}
+
+.warning {
+    color: var(--warning);
+    font-size: 11px;
+    display: block;
+    margin-top: 8px;
+}
+
+@media (max-width: 768px) {
+    .wallet-balances,
+    .deposit-methods {
+        grid-template-columns: 1fr;
+    }
+}
