@@ -17,6 +17,8 @@
     
     <!-- کتابخانه ذرات -->
     <script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
+    <!-- Supabase -->
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 </head>
 <body>
     <!-- ذرات پس‌زمینه -->
@@ -57,7 +59,7 @@
                 
                 <button class="btn btn-primary" id="connectWalletBtn">
                     <i class="fas fa-wallet"></i>
-                    اتصال کیف پول
+                    ورود / ثبت‌نام
                 </button>
             </div>
         </nav>
@@ -336,7 +338,7 @@
     <!-- ابزارک پویا -->
     <div class="floating-widget" id="floatingWidget">
         <div class="pulse"></div>
-        <span id="widgetText">سیستم استخراج فعال</span>
+        <span id="widgetText">برای شروع وارد شوید</span>
     </div>
 
     <!-- نوتیفیکیشن -->
@@ -354,11 +356,8 @@
     </div>
 
     <!-- اسکریپت‌های ما -->
-    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <script src="js/particles.js"></script>
-    <script src="js/supabase.js"></script>
-    <script src="js/auth.js"></script>
-    <script src="js/wallet.js"></script>
-    <script src="js/game.js"></script>
+    <script src="js/supabase-init.js"></script> <!-- فقط تنظیمات اولیه -->
+    <script src="js/game-main.js"></script> <!-- فایل اصلی ترکیبی -->
 </body>
 </html>
